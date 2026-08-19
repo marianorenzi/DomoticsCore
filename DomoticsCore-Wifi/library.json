@@ -1,6 +1,6 @@
 {
   "name": "DomoticsCore-Wifi",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "DomoticsCore WiFi component (header-only) providing connection management and AP/STA control",
   "keywords": ["esp32", "domotics", "wifi", "network"],
   "repository": {
@@ -19,6 +19,7 @@
     "lib_archive": false
   },
   "dependencies": [
+    { "name": "DomoticsCore-Network", "version": ">=1.0.0" },
     { "name": "ArduinoJson", "version": ">=7.0.0" }
   ]
 }

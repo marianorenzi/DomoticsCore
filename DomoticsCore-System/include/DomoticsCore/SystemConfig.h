@@ -11,6 +11,7 @@
  */
 
 #include <DomoticsCore/Logger.h>
+#include <vector>
 
 namespace DomoticsCore {
 
@@ -64,6 +65,9 @@ struct SystemConfig {
     String wifiPassword = "";
     String wifiAPSSID = "";         // Auto-generated if empty (DeviceName-XXXX)
     String wifiAPPassword = "";     // Empty = open AP
+
+    // Optional first-boot provider order. Persisted Network config takes precedence.
+    std::vector<String> networkPriorities;
 
     // LED (optional)
     bool enableLED = true;

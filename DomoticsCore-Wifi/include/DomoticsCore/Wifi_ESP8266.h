@@ -91,9 +91,6 @@ inline uint8_t getRawStatus() { return (uint8_t)WiFi.status(); }
 
 } // namespace WiFiImpl
 
-using NetworkClient = ::WiFiClient;
-using SecureNetworkClient = ::BearSSL::WiFiClientSecure;
-
 } // namespace HAL
 } // namespace DomoticsCore
 

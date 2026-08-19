@@ -30,6 +30,7 @@
     "flags": [
       "-IDomoticsCore-Core/include",
       "-IDomoticsCore-System/include",
+      "-IDomoticsCore-Network/include",
       "-IDomoticsCore-Wifi/include",
       "-IDomoticsCore-LED/include",
       "-IDomoticsCore-Storage/include",

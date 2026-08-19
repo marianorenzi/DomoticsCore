@@ -43,9 +43,6 @@ inline uint8_t getRawStatus() { return 0; }
 
 } // namespace WiFiImpl
 
-class NetworkClient {};
-class SecureNetworkClient {};
-
 } // namespace HAL
 } // namespace DomoticsCore
 

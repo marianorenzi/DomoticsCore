@@ -18,6 +18,7 @@
 #include <DomoticsCore/LED.h>
 #include <DomoticsCore/RemoteConsole.h>
 #include <DomoticsCore/Wifi.h>
+#include <DomoticsCore/Network.h>
 #include <DomoticsCore/Logger.h>
 #include <DomoticsCore/Events.h>
 #include <DomoticsCore/Platform_HAL.h>     // For HAL::getChipId()
@@ -90,6 +91,7 @@ private:
     Components::LEDComponent* led = nullptr;
     Components::RemoteConsoleComponent* console = nullptr;
     Components::WifiComponent* wifi = nullptr;
+    Components::NetworkComponent* network = nullptr;
     
     // WebUI providers (managed by SystemHelpers::WebUIProviders)
     SystemHelpers::WebUIProviders webUIProviders;
@@ -123,6 +125,7 @@ public:
         // 1. Register components
         registerLEDComponent();
         registerStorageComponent();
+        registerNetworkComponent();
         registerWifiComponent();
         registerConsoleComponent();
         registerOptionalComponents();
@@ -186,6 +189,7 @@ public:
     SystemState getState() const { return state; }
     Components::RemoteConsoleComponent* getConsole() { return console; }
     Components::WifiComponent* getWiFi() { return wifi; }
+    Components::NetworkComponent* getNetwork() { return network; }
     
     void onStateChange(std::function<void(SystemState, SystemState)> callback) {
         if (stateCallbacks.size() >= 8) {
@@ -266,6 +270,13 @@ private:
         
         core.addComponent(std::move(wifiPtr));
         DLOG_I(LOG_SYSTEM, "✓ WiFi component configured");
+    }
+
+    void registerNetworkComponent() {
+        auto networkPtr = std::make_unique<Components::NetworkComponent>(config.networkPriorities);
+        network = networkPtr.get();
+        core.addComponent(std::move(networkPtr));
+        DLOG_I(LOG_SYSTEM, "✓ Network component registered");
     }
     
     void registerConsoleComponent() {

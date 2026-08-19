@@ -9,8 +9,6 @@
 #if DOMOTICS_PLATFORM_ESP32
 
 #include <WiFi.h>
-#include <WiFiClient.h>
-#include <WiFiClientSecure.h>
 
 namespace DomoticsCore {
 namespace HAL {
@@ -88,9 +86,6 @@ inline void disconnectAndOff() { WiFi.disconnect(true); WiFi.mode(WIFI_OFF); }
 inline uint8_t getRawStatus() { return (uint8_t)WiFi.status(); }
 
 } // namespace WiFiImpl
-
-using NetworkClient = ::WiFiClient;
-using SecureNetworkClient = ::WiFiClientSecure;
 
 } // namespace HAL
 } // namespace DomoticsCore

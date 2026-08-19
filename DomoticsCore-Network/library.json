@@ -1,0 +1,23 @@
+{
+  "name": "DomoticsCore-Network",
+  "version": "1.1.0",
+  "description": "Transport-neutral network provider registry and socket HAL for DomoticsCore",
+  "keywords": ["esp32", "domotics", "network", "wifi", "ethernet"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JN0V/DomoticsCore.git"
+  },
+  "authors": [{ "name": "JN0V", "maintainer": true }],
+  "license": "MIT",
+  "frameworks": ["arduino"],
+  "platforms": ["espressif32", "espressif8266"],
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src",
+    "lib_archive": false
+  },
+  "dependencies": [
+    { "name": "DomoticsCore-Core", "version": ">=1.5.0" }
+  ]
+}
+

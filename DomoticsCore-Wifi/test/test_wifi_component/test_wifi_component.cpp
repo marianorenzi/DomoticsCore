@@ -6,6 +6,7 @@
 #include <DomoticsCore/Core.h>
 #include <DomoticsCore/Wifi.h>
 #include <DomoticsCore/WifiEvents.h>
+#include <DomoticsCore/Network.h>
 #include <DomoticsCore/Testing/HeapTracker.h>
 
 using namespace DomoticsCore;
@@ -43,12 +44,10 @@ void test_wifi_events_constants_defined(void) {
     // Verify event constants are properly defined
     TEST_ASSERT_NOT_NULL(WifiEvents::EVENT_STA_CONNECTED);
     TEST_ASSERT_NOT_NULL(WifiEvents::EVENT_AP_ENABLED);
-    TEST_ASSERT_NOT_NULL(WifiEvents::EVENT_NETWORK_READY);
 
     // Verify they have expected values
     TEST_ASSERT_EQUAL_STRING("wifi/sta/connected", WifiEvents::EVENT_STA_CONNECTED);
     TEST_ASSERT_EQUAL_STRING("wifi/ap/enabled", WifiEvents::EVENT_AP_ENABLED);
-    TEST_ASSERT_EQUAL_STRING("network/ready", WifiEvents::EVENT_NETWORK_READY);
 }
 
 // ============================================================================
@@ -59,7 +58,7 @@ void test_wifi_component_creation_default(void) {
     auto wifi = std::make_unique<WifiComponent>();
 
     TEST_ASSERT_EQUAL_STRING("Wifi", wifi->metadata.name);
-    TEST_ASSERT_EQUAL_STRING("1.4.1", wifi->metadata.version);
+    TEST_ASSERT_EQUAL_STRING("1.5.1", wifi->metadata.version);
 }
 
 void test_wifi_component_creation_with_credentials(void) {
@@ -260,6 +259,30 @@ void test_wifi_inetworkprovider_getconnectionstatus(void) {
 
     String status = wifiPtr->getConnectionStatus();
     TEST_ASSERT_TRUE(status.length() > 0);
+}
+
+void test_wifi_publishes_provider_address_event(void) {
+    bool received = false;
+    String providerId;
+    String address;
+    testCore->on<NetworkEvents::NetworkProviderAddressEvent>(
+        NetworkEvents::EVENT_PROVIDER_ADDRESS_CHANGED,
+        [&](const NetworkEvents::NetworkProviderAddressEvent& event) {
+            received = true;
+            providerId = event.providerId;
+            address = event.address;
+        });
+
+    testCore->addComponent(std::make_unique<NetworkComponent>());
+    auto wifi = std::make_unique<WifiComponent>();
+    wifi->enableAP("AddressEventTest", "");
+    testCore->addComponent(std::move(wifi));
+    TEST_ASSERT_TRUE(testCore->begin());
+    for (int i = 0; i < 4; ++i) testCore->loop();
+
+    TEST_ASSERT_TRUE(received);
+    TEST_ASSERT_EQUAL_STRING("wifi", providerId.c_str());
+    TEST_ASSERT_EQUAL_STRING("0.0.0.0", address.c_str());
 }
 
 // ============================================================================
@@ -601,6 +624,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_wifi_inetworkprovider_isconnected);
     RUN_TEST(test_wifi_inetworkprovider_getlocalip);
     RUN_TEST(test_wifi_inetworkprovider_getconnectionstatus);
+    RUN_TEST(test_wifi_publishes_provider_address_event);
 
     // Mode detection tests
     RUN_TEST(test_wifi_mode_detection_initial);

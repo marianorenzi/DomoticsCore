@@ -1,6 +1,6 @@
 {
   "name": "DomoticsCore-System",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "Complete ready-to-use system with automatic component orchestration",
   "keywords": ["esp32", "domotics", "system", "all-in-one", "ready-to-use"],
   "repository": {
@@ -22,6 +22,7 @@
     { "name": "DomoticsCore-Core", "version": ">=1.0.0" },
     { "name": "DomoticsCore-LED", "version": ">=1.0.0" },
     { "name": "DomoticsCore-RemoteConsole", "version": ">=0.1.0" },
-    { "name": "DomoticsCore-Wifi", "version": ">=1.0.0" }
+    { "name": "DomoticsCore-Network", "version": ">=1.0.0" },
+    { "name": "DomoticsCore-Wifi", "version": ">=1.5.0" }
   ]
 }
