@@ -89,7 +89,7 @@ protected:
         detail.withField(WebUIField("broker_addr", "Broker", WebUIFieldType::Text, ""))
               .withField(WebUIField("state", "Connection State", WebUIFieldType::Status, "Disconnected"))
               .withField(WebUIField("uptime", "Uptime", WebUIFieldType::Text, "0s"))
-              .withField(WebUIField("detail_client_id", "Client ID", WebUIFieldType::Text, ""))
+              .withField(WebUIField("client_id", "Client ID", WebUIFieldType::Text, ""))
               .withField(WebUIField("publish_count", "Messages Published", WebUIFieldType::Number, "0"))
               .withField(WebUIField("receive_count", "Messages Received", WebUIFieldType::Number, "0"))
               .withField(WebUIField("subscription_count", "Active Subscriptions", WebUIFieldType::Number, "0"))

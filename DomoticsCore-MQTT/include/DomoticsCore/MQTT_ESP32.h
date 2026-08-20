@@ -12,8 +12,8 @@
 #endif
 
 #include <PubSubClient.h>
-#include <WiFiClient.h>
-#include <WiFiClientSecure.h>
+#include <NetworkClient.h>
+#include <NetworkClientSecure.h>
 
 namespace DomoticsCore {
 namespace HAL {
@@ -27,8 +27,8 @@ namespace MQTT {
 class MQTTClientImpl : public MQTTClient {
 private:
     PubSubClient client;
-    WiFiClient wifiClient;
-    WiFiClientSecure wifiClientSecure;
+    NetworkClient networkClient;
+    NetworkClientSecure networkClientSecure;
     bool useTLS;
 
 public:
@@ -37,7 +37,7 @@ public:
      * @param useTLS_ Use TLS/SSL connection
      */
     explicit MQTTClientImpl(bool useTLS_ = false)
-        : client(useTLS_ ? (Client&)wifiClientSecure : (Client&)wifiClient)
+        : client(useTLS_ ? (Client&)networkClientSecure : (Client&)networkClient)
         , useTLS(useTLS_) {}
 
     bool connect(const char* id,

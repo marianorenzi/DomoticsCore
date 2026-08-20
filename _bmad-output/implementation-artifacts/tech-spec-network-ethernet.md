@@ -346,12 +346,23 @@ Arduino-ESP32 `3.3.2`, and ESP-IDF `5.5.1`.
 
 ### Stage 3 — Network consumers
 
-- Migrate all existing ESP32 and ESP32-C3 example environments to the pioarduino release validated
+Status: implemented. Native consumer suites pass and the WiFiOnly, BasicMQTT, BasicNTP,
+BasicRemoteConsole, and FullStack ESP32-C3 builds pass with pioarduino `55.03.32`.
+
+- [x] Migrate all existing ESP32 and ESP32-C3 example environments to the pioarduino release validated
   in Stage 2.5; do not use the mutable `stable` URL.
-- Migrate MQTT to Arduino Network types and RemoteConsole to the Network HAL; remove their
-  DomoticsCore-Wifi dependency where it is no longer otherwise required. Migrate NTP, WebUI
-  orchestration, and System incrementally.
-- Preserve existing WiFi APIs. Initial implementation and validation target ESP32 only.
+- [x] Migrate MQTT to Arduino Network types and `network/ready`; suspend automatic retries while
+  aggregate readiness is false.
+- [x] Migrate RemoteConsole to the Network HAL and generic provider address events; remove its and
+  MQTT's DomoticsCore-Wifi dependency where it is no longer otherwise required.
+- [x] Start NTP on generic network readiness, close WebUI sockets on generic provider interface
+  changes, and remove System's WiFi-to-MQTT orchestration while preserving its WiFi helpers.
+- [x] Preserve existing WiFi APIs. Initial implementation and validation target ESP32 only.
+
+The consumer migration intentionally does not select an active provider or force a default lwIP
+interface. MQTT uses Arduino `NetworkClient`/`NetworkClientSecure` directly; shared components use
+`HAL::NetworkClient`/`HAL::NetworkServer` for native substitution. Provider priorities, route
+selection, and failover remain in their later stages.
 
 ### Stage 4 — Network priority configuration
 

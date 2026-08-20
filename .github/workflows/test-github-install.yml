@@ -35,7 +35,7 @@ jobs:
           cd test-install
           cat > platformio.ini << EOF
           [env:esp32dev]
-          platform = espressif32
+          platform = https://github.com/pioarduino/platform-espressif32/releases/download/55.03.32/platform-espressif32.zip
           board = esp32dev
           framework = arduino
           board_build.partitions = min_spiffs.csv

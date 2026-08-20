@@ -20,10 +20,41 @@
 #include <DomoticsCore/Core.h>
 #include <DomoticsCore/MQTT.h>
 #include <DomoticsCore/MQTTEvents.h>
+#include <DomoticsCore/NetworkEvents.h>
 #include <DomoticsCore/Testing/HeapTracker.h>
 
 using namespace DomoticsCore;
 using namespace DomoticsCore::Components;
+
+void test_mqtt_reacts_to_generic_network_readiness() {
+    MQTTConfig config;
+    config.broker = "test.broker.com";
+    config.autoReconnect = true;
+    config.reconnectDelay = 0;
+
+    Core core;
+    auto mqtt = std::make_unique<MQTTComponent>(config);
+    MQTTComponent* mqttPtr = mqtt.get();
+    core.addComponent(std::move(mqtt));
+    TEST_ASSERT_TRUE(core.begin());
+
+    NetworkEvents::NetworkAvailabilityEvent unavailable{false};
+    core.getEventBus().publishSticky(NetworkEvents::EVENT_READY, unavailable);
+    core.loop();
+    TEST_ASSERT_FALSE(mqttPtr->isConnected());
+
+    NetworkEvents::NetworkAvailabilityEvent available{true};
+    core.getEventBus().publishSticky(NetworkEvents::EVENT_READY, available);
+    core.loop();
+    core.loop();
+    TEST_ASSERT_TRUE(mqttPtr->isConnected());
+
+    core.getEventBus().publishSticky(NetworkEvents::EVENT_READY, unavailable);
+    core.loop();
+    mqttPtr->disconnect();
+    for (int i = 0; i < 3; ++i) core.loop();
+    TEST_ASSERT_FALSE(mqttPtr->isConnected());
+}
 
 // ============================================================================
 // Event Tests
@@ -439,8 +470,7 @@ void test_mqtt_loop_processes_when_connected_and_disabled() {
     MQTTComponent mqtt(config);
     mqtt.begin();
 
-    // Simulate WiFi + MQTT connected
-    HAL::WiFiImpl::setConnectedForTest(true);
+    // Simulate MQTT connected through the native transport stub.
     mqtt.connect();
 
     TEST_ASSERT_TRUE(mqtt.isConnected());
@@ -464,7 +494,6 @@ void test_mqtt_setconfig_preserves_enabled_when_connected() {
     MQTTComponent mqtt(config);
     mqtt.begin();
 
-    HAL::WiFiImpl::setConnectedForTest(true);
     mqtt.connect();
     TEST_ASSERT_TRUE(mqtt.isConnected());
 
@@ -517,7 +546,6 @@ void test_mqtt_full_lifecycle_empty_to_configured() {
     mqtt.setConfig(newCfg);
 
     // Phase 3: connect
-    HAL::WiFiImpl::setConnectedForTest(true);
     mqtt.connect();
     TEST_ASSERT_TRUE(mqtt.isConnected());
 
@@ -540,7 +568,6 @@ void test_mqtt_config_reload_preserves_active_connection() {
     MQTTComponent mqtt(config);
     mqtt.begin();
 
-    HAL::WiFiImpl::setConnectedForTest(true);
     mqtt.connect();
     TEST_ASSERT_TRUE(mqtt.isConnected());
 
@@ -579,8 +606,7 @@ void test_mqtt_reconnect_blocked_when_disabled() {
     MQTTComponent mqtt(config);
     mqtt.begin();
 
-    // WiFi is available — only the enabled check should block reconnection
-    HAL::WiFiImpl::setConnectedForTest(true);
+    // Network is available in standalone mode — only enabled blocks reconnect.
 
     for (int i = 0; i < 10; i++) {
         mqtt.loop();
@@ -624,7 +650,6 @@ void test_mqtt_loop_empty_broker_early_return() {
     MQTTComponent mqtt(config);
     mqtt.begin();
 
-    HAL::WiFiImpl::setConnectedForTest(true);
     mqtt.connect();
     TEST_ASSERT_TRUE(mqtt.isConnected());
 
@@ -656,14 +681,11 @@ void test_mqtt_memory_stability_message_queue(void) {
 
     // Warm up: full connect/disconnect + queue/drain cycle to stabilize allocator
     for (int w = 0; w < 3; w++) {
-        HAL::WiFiImpl::setConnectedForTest(false);
         mqtt.publish("warmup/topic", "warmup_payload");
-        HAL::WiFiImpl::setConnectedForTest(true);
         mqtt.connect();
         for (int j = 0; j < 5; j++) mqtt.loop();
         mqtt.disconnect();
     }
-    HAL::WiFiImpl::setConnectedForTest(false);
 
     tracker.checkpoint("before");
 
@@ -672,13 +694,11 @@ void test_mqtt_memory_stability_message_queue(void) {
         mqtt.publish("test/topic", "payload_data");
     }
 
-    HAL::WiFiImpl::setConnectedForTest(true);
     mqtt.connect();
     for (int i = 0; i < 15; i++) {
         mqtt.loop();
     }
     mqtt.disconnect();
-    HAL::WiFiImpl::setConnectedForTest(false);
 
     tracker.checkpoint("after");
 
@@ -704,7 +724,6 @@ void test_mqtt_memory_stability_subscribe_cycle(void) {
     MQTTComponent mqtt(config);
     mqtt.begin();
 
-    HAL::WiFiImpl::setConnectedForTest(true);
     mqtt.connect();
 
     // Warm up
@@ -725,7 +744,6 @@ void test_mqtt_memory_stability_subscribe_cycle(void) {
     TEST_ASSERT_TRUE_MESSAGE(result.passed, result.message.c_str());
 
     mqtt.shutdown();
-    HAL::WiFiImpl::setConnectedForTest(false);
 }
 
 // ============================================================================
@@ -734,7 +752,6 @@ void test_mqtt_memory_stability_subscribe_cycle(void) {
 
 void setUp() {}
 void tearDown() {
-    HAL::WiFiImpl::setConnectedForTest(false);
 }
 
 // ============================================================================
@@ -826,6 +843,7 @@ int main() {
 
     // Event tests
     RUN_TEST(test_mqtt_events_constants_defined);
+    RUN_TEST(test_mqtt_reacts_to_generic_network_readiness);
 
     // Component creation tests
     RUN_TEST(test_mqtt_component_creation_default);

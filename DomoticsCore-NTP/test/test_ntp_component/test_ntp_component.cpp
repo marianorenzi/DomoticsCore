@@ -16,11 +16,26 @@
 #include <DomoticsCore/Core.h>
 #include <DomoticsCore/NTP.h>
 #include <DomoticsCore/NTPEvents.h>
+#include <DomoticsCore/NetworkEvents.h>
 #include <DomoticsCore/Testing/HeapTracker.h>
 
 using namespace DomoticsCore;
 using namespace DomoticsCore::Components;
 using namespace DomoticsCore::Testing;
+
+void test_ntp_waits_for_generic_network_readiness() {
+    Core core;
+    auto ntp = std::make_unique<NTPComponent>();
+    NTPComponent* ntpPtr = ntp.get();
+    core.addComponent(std::move(ntp));
+    TEST_ASSERT_TRUE(core.begin());
+    TEST_ASSERT_FALSE(ntpPtr->isClientStarted());
+
+    NetworkEvents::NetworkAvailabilityEvent available{true};
+    core.getEventBus().publishSticky(NetworkEvents::EVENT_READY, available);
+    core.loop();
+    TEST_ASSERT_TRUE(ntpPtr->isClientStarted());
+}
 
 // ============================================================================
 // Event Tests
@@ -527,6 +542,7 @@ int main() {
     RUN_TEST(test_ntp_statistics_initial);
 
     // Lifecycle tests
+    RUN_TEST(test_ntp_waits_for_generic_network_readiness);
     RUN_TEST(test_ntp_begin_returns_success);
     RUN_TEST(test_ntp_begin_disabled_returns_success);
     RUN_TEST(test_ntp_shutdown_returns_success);

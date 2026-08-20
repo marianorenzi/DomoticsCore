@@ -8,8 +8,8 @@
 #include <DomoticsCore/IComponent.h>
 #include <DomoticsCore/Logger.h>
 #include <DomoticsCore/Platform_HAL.h>    // For restart()
-#include <DomoticsCore/Wifi_HAL.h>        // For WiFi functions
-#include <DomoticsCore/WiFiServer_HAL.h>  // For WiFiServer and WiFiClient
+#include <DomoticsCore/Network_HAL.h>
+#include <DomoticsCore/NetworkEvents.h>
 // Platform_HAL.h provides: getFreeHeap(), getChipModel(), getChipRevision(), getCpuFreqMHz()
 #include <vector>
 #include <map>
@@ -64,10 +64,11 @@ typedef std::function<String(const String& args)> CommandHandler;
 class RemoteConsoleComponent : public IComponent {
 private:
     RemoteConsoleConfig config;
-    HAL::WiFiServer* telnetServer = nullptr;
+    HAL::NetworkServer* telnetServer = nullptr;
     LoggerCallbacks::CallbackId loggerCallbackId_ = 0;
     uint32_t nextClientId = 1;
-    std::vector<std::pair<uint32_t, HAL::WiFiClient>> clients;
+    std::vector<std::pair<uint32_t, HAL::NetworkClient>> clients;
+    std::map<String, String> networkAddresses;
     
     // Circular buffer for log entries - grows lazily to avoid OOM on startup
     std::vector<LogEntry> logBuffer;
@@ -100,7 +101,8 @@ public:
     }
 
     uint16_t getPort() const { return config.port; }
-    HAL::WiFiServer* getServer() const { return telnetServer; }
+    HAL::NetworkServer* getServer() const { return telnetServer; }
+    const std::map<String, String>& getNetworkAddresses() const { return networkAddresses; }
 
     LogLevel getLogLevel() const { return currentLogLevel; }
 
@@ -134,7 +136,7 @@ public:
         delete telnetServer;
         telnetServer = nullptr;
 
-        telnetServer = new HAL::WiFiServer(config.port);
+        telnetServer = new HAL::NetworkServer(config.port);
         telnetServer->begin();
         telnetServer->setNoDelay(true);
 
@@ -161,8 +163,14 @@ public:
             this->log(level, tag, msg);
         });
         
-        // Start telnet server (doesn't require WiFi to be connected yet)
-        telnetServer = new HAL::WiFiServer(config.port);
+        // Start the server before a provider is ready; lwIP binds it generically.
+        on<NetworkEvents::NetworkProviderAddressEvent>(NetworkEvents::EVENT_PROVIDER_ADDRESS_CHANGED,
+            [this](const NetworkEvents::NetworkProviderAddressEvent& event) {
+                networkAddresses[String(event.providerId)] = String(event.address);
+                connectionInfoDisplayed = false;
+            });
+
+        telnetServer = new HAL::NetworkServer(config.port);
         telnetServer->begin();
         telnetServer->setNoDelay(true);
         
@@ -173,7 +181,7 @@ public:
     }
     
     void onComponentsReady(const ComponentRegistry& /*registry*/) override {
-        // Display connection info once WiFi is connected
+        // Display connection info for any provider address already announced.
         displayConnectionInfo();
     }
     
@@ -186,14 +194,13 @@ public:
 
         if (getLastStatus() != ComponentStatus::Success || !telnetServer) return;
         
-        // Check if WiFi connected and we haven't displayed info yet
-        if (!connectionInfoDisplayed && HAL::WiFiHAL::isConnected()) {
+        if (!connectionInfoDisplayed && !getNetworkAddresses().empty()) {
             displayConnectionInfo();
         }
         
         // Accept new clients (Task 28)
         if (telnetServer->hasClient()) {
-            HAL::WiFiClient newClient = telnetServer->accept();
+            HAL::NetworkClient newClient = telnetServer->accept();
 
             if (newClient) {
                 // Check max clients
@@ -222,7 +229,7 @@ public:
             unsigned long now = HAL::Platform::getMillis();
             for (auto it = clients.begin(); it != clients.end(); ) {
                 uint32_t cid = it->first;
-                HAL::WiFiClient& client = it->second;
+                HAL::NetworkClient& client = it->second;
                 if (!clientAuthenticated[cid] && (now - clientConnectTime[cid]) >= config.authTimeoutMs) {
                     client.println("Authentication timeout. Disconnecting.");
                     client.stop();
@@ -240,7 +247,7 @@ public:
         bool erased = false;
         for (auto it = clients.begin(); it != clients.end(); ) {
             uint32_t cid = it->first;
-            HAL::WiFiClient& client = it->second;
+            HAL::NetworkClient& client = it->second;
             if (!client.connected()) {
                 // Clean up all client state (Task 29)
                 clientBuffers.erase(cid);
@@ -458,20 +465,28 @@ private:
         // Info command
         registerCommand("info", [this](const String& args) {
             char buf[384];
+            const auto& addresses = getNetworkAddresses();
             snprintf(buf, sizeof(buf),
                      "\nSystem Information:\n"
                      "  Uptime: %lus\n"
                      "  Free Heap: %lu bytes\n"
                      "  Chip: %s Rev%d\n"
                      "  CPU Freq: %lu MHz\n"
-                     "  WiFi: %s (%s)\n"
-                     "  RSSI: %d dBm\n",
+                     "  Network: ",
                      (unsigned long)(HAL::Platform::getMillis() / 1000),
                      (unsigned long)HAL::getFreeHeap(),
                      HAL::getChipModel().c_str(), HAL::getChipRevision(),
-                     (unsigned long)HAL::getCpuFreqMHz(),
-                     HAL::WiFiHAL::getSSID().c_str(), HAL::WiFiHAL::getLocalIP().c_str(),
-                     HAL::WiFiHAL::getRSSI());
+                     (unsigned long)HAL::getCpuFreqMHz());
+            if (addresses.empty()) {
+                snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "unavailable\n");
+            } else {
+                for (const auto& entry : addresses) {
+                    if (entry.second.isEmpty()) continue;
+                    snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\n    %s: %s",
+                        entry.first.c_str(), entry.second.c_str());
+                }
+                snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), "\n");
+            }
             return String(buf);
         });
         
@@ -508,7 +523,7 @@ private:
         return false;
     }
     
-    void sendWelcome(HAL::WiFiClient& client) {
+    void sendWelcome(HAL::NetworkClient& client) {
         client.println("\n========================================");
         client.println("  DomoticsCore Remote Console");
         client.println("========================================");
@@ -532,7 +547,7 @@ private:
         client.print("> ");  // Show initial prompt
     }
     
-    void handleClient(uint32_t clientId, HAL::WiFiClient& client) {
+    void handleClient(uint32_t clientId, HAL::NetworkClient& client) {
         while (client.available()) {
             char c = client.read();
 
@@ -707,9 +722,11 @@ private:
     void displayConnectionInfo() {
         if (connectionInfoDisplayed) return;
         
-        if (HAL::WiFiHAL::isConnected()) {
-            DLOG_I(LOG_CONSOLE, "Connect via: telnet %s %d", 
-                   HAL::WiFiHAL::getLocalIP().c_str(), config.port);
+        const auto& addresses = getNetworkAddresses();
+        for (const auto& entry : addresses) {
+            if (entry.second.isEmpty()) continue;
+            DLOG_I(LOG_CONSOLE, "Connect via %s: telnet <%s> %d",
+                   entry.first.c_str(), entry.second.c_str(), config.port);
             connectionInfoDisplayed = true;
         }
     }

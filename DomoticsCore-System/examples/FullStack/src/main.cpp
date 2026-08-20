@@ -116,6 +116,16 @@ void setup() {
     // Create system
     domotics = new System(config);
     
+    // Initialize system (AUTOMATIC: WiFi, LED, Console, State management)
+    if (!domotics->begin()) {
+        DLOG_E(LOG_APP, "System initialization failed!");
+        // System in ERROR state - components still run (LED, Console, etc.)
+        while (1) {
+            domotics->loop();
+            yield();  // Allow RTOS tasks to run
+        }
+    }
+    
     // Register custom console commands
     domotics->registerCommand("temp", [](const String& args) {
         float temp = readTemperature();
@@ -133,16 +143,6 @@ void setup() {
             return String("Usage: relay on|off\n");
         }
     });
-    
-    // Initialize system (AUTOMATIC: WiFi, LED, Console, State management)
-    if (!domotics->begin()) {
-        DLOG_E(LOG_APP, "System initialization failed!");
-        // System in ERROR state - components still run (LED, Console, etc.)
-        while (1) {
-            domotics->loop();
-            yield();  // Allow RTOS tasks to run
-        }
-    }
     
     // YOUR CUSTOM INITIALIZATION
     pinMode(5, OUTPUT);  // Relay pin

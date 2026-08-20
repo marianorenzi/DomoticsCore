@@ -22,6 +22,7 @@
 #include "DomoticsCore/Logger.h"
 #include "DomoticsCore/Platform_HAL.h"  // For HAL::getFreeHeap()
 #include "DomoticsCore/MemoryManager.h" // For adaptive WS limits
+#include "DomoticsCore/NetworkEvents.h"
 #include "DomoticsCore/WebUI_HAL.h"     // For WebUI buffer sizes
 #include "DomoticsCore/Generated/WebUIAssets.h"
 
@@ -265,16 +266,16 @@ public:
         auto& reg = const_cast<Components::ComponentRegistry&>(registry);
         reg.addListener(this);
         
-        // Subscribe to WiFi AP events - close WebSocket connections when network changes
-        // This prevents crashes from sending to clients connected via the old network
-        // Note: Using string literal to avoid WebUI depending on Wifi module
-        // Event topic matches WifiEvents::EVENT_AP_ENABLED from DomoticsCore-Wifi
-        on<bool>("wifi/ap/enabled", [this](const bool& enabled) {
-            if (!enabled) {
-                DLOG_I(LOG_WEB, "AP disabled - closing WebSocket connections");
+        // A provider loss or address change invalidates sockets bound to the old
+        // interface/address, regardless of whether that provider is WiFi or Ethernet.
+        on<NetworkEvents::NetworkProviderStateEvent>(NetworkEvents::EVENT_PROVIDER_STATE_CHANGED,
+            [this](const NetworkEvents::NetworkProviderStateEvent& event) {
+                if (!event.connected) webSocket->closeAllConnections();
+            });
+        on<NetworkEvents::NetworkProviderAddressEvent>(NetworkEvents::EVENT_PROVIDER_ADDRESS_CHANGED,
+            [this](const NetworkEvents::NetworkProviderAddressEvent&) {
                 webSocket->closeAllConnections();
-            }
-        });
+            });
     }
 
     // CachingWebUIProvider implementation for self-registration

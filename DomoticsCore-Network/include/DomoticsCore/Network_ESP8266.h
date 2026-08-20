@@ -2,6 +2,7 @@
 
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecureBearSSL.h>
+#include <WiFiUdp.h>
 
 namespace DomoticsCore { 
 namespace HAL {

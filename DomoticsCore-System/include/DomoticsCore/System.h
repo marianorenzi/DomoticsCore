@@ -438,29 +438,10 @@ private:
     void setupEventOrchestration() {
         DLOG_I(LOG_SYSTEM, "Setting up component event orchestration...");
         
-        // WiFi → MQTT
-#if __has_include(<DomoticsCore/MQTT.h>)
-        auto* mqttComp = core.getComponent<Components::MQTTComponent>("MQTT");
-        if (mqttComp && wifi) {
-            core.getEventBus().subscribe(WifiEvents::EVENT_STA_CONNECTED, [mqttComp](const void* payload) {
-                if (payload && *static_cast<const bool*>(payload)) {
-                    DLOG_I(LOG_SYSTEM, "📶 WiFi connected → triggering MQTT connection");
-                    mqttComp->connect();
-                }
-            });
-            DLOG_I(LOG_SYSTEM, "✓ WiFi → MQTT orchestration configured");
-
-            if (wifi->isSTAConnected()) {
-                DLOG_I(LOG_SYSTEM, "📶 WiFi already connected → triggering MQTT");
-                mqttComp->connect();
-            }
-        }
-#endif
-        
         // NTP event logging
 #if __has_include(<DomoticsCore/NTP.h>)
         auto* ntpComp = core.getComponent<Components::NTPComponent>("NTP");
-        if (ntpComp && wifi) {
+        if (ntpComp) {
             core.getEventBus().subscribe(NTPEvents::EVENT_SYNCED, [](const void*) {
                 DLOG_I(LOG_SYSTEM, "NTP time synchronized");
             });

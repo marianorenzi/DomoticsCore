@@ -7,12 +7,12 @@
  * @example DomoticsCore-MQTT/examples/BasicMQTT/src/main.cpp
  * @example DomoticsCore-MQTT/examples/MQTTWithWebUI/src/main.cpp
  *
- * Uses Wifi_HAL for WiFi connectivity checks (multi-platform support).
+ * Uses DomoticsCore-Network readiness events for transport availability.
  */
 
 #include <DomoticsCore/IComponent.h>
 #include <DomoticsCore/Platform_HAL.h>  // For chip ID, platform info, and MQTT_MAX_PACKET_SIZE
-#include <DomoticsCore/Wifi_HAL.h>      // For WiFi connectivity check
+#include <DomoticsCore/NetworkEvents.h>
 #include <DomoticsCore/MQTT_HAL.h>      // Platform-abstracted MQTT client
 #include <DomoticsCore/MQTTEvents.h>    // MQTT event constants
 #include <DomoticsCore/Logger.h>
@@ -375,6 +375,8 @@ private:
 
     // State management
     MQTTState state;
+    bool networkAvailable = false;
+    bool networkReadinessManaged = false;
     String lastError;
     Utils::NonBlockingDelay reconnectTimer;
     unsigned long stateChangeTime;

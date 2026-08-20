@@ -23,10 +23,10 @@ private:
         bool active;
         uint16_t port;
         uint8_t logLevel;
-        String ip;
+        std::map<String, String> addresses;
 
         bool operator==(const ConsoleUIState& other) const {
-            return active == other.active && port == other.port && logLevel == other.logLevel && ip == other.ip;
+            return active == other.active && port == other.port && logLevel == other.logLevel && addresses == other.addresses;
         }
         bool operator!=(const ConsoleUIState& other) const { return !(*this == other); }
     };
@@ -90,8 +90,17 @@ public:
 
         if (contextId == "console_settings") {
             const uint16_t port = console->getPort();
-            const String ip = HAL::WiFiHAL::getLocalIP();
-            const String connect = String("telnet ") + (ip.length() ? ip : String("0.0.0.0")) + " " + String(port);
+            String connect;
+            for (const auto& entry : console->getNetworkAddresses()) {
+                if (entry.second.isEmpty()) continue;
+                if (!connect.isEmpty()) connect += "\n";
+                connect += entry.first;
+                connect += ": telnet ";
+                connect += entry.second;
+                connect += " ";
+                connect += String(port);
+            }
+            if (connect.isEmpty()) connect = "No network address";
 
             doc["status"] = console->isActive() ? "Active" : "Inactive";
             doc["connect"] = connect;
@@ -154,7 +163,7 @@ public:
             console->isActive(),
             console->getPort(),
             (uint8_t)console->getLogLevel(),
-            HAL::WiFiHAL::getLocalIP()
+            console->getNetworkAddresses()
         };
 
         return uiState.hasChanged(current);

@@ -15,6 +15,7 @@
 #include "DomoticsCore/Logger.h"
 #include "DomoticsCore/Timer.h"
 #include "DomoticsCore/NTPEvents.h"
+#include "DomoticsCore/NetworkEvents.h"
 #include "DomoticsCore/Platform_HAL.h"  // For millis/delay abstractions
 #include "NTP_HAL.h"  // Hardware Abstraction Layer for NTP
 #include <time.h>
@@ -119,7 +120,7 @@ public:
     }
 
     virtual ~NTPComponent() {
-        if (config.enabled) {
+        if (ntpStarted) {
             HAL::NTP::stop();
         }
         DLOG_D(LOG_NTP, "Component destroyed");
@@ -134,6 +135,25 @@ public:
             DLOG_W(LOG_NTP, "Component disabled");
             return ComponentStatus::Success;
         }
+
+        if (__dc_eventBus) {
+            on<NetworkEvents::NetworkAvailabilityEvent>(NetworkEvents::EVENT_READY,
+                [this](const NetworkEvents::NetworkAvailabilityEvent& event) {
+                    networkAvailable = event.available;
+                    if (event.available && !ntpStarted) startClient();
+                }, true);
+            return ComponentStatus::Success;
+        }
+
+        startClient();
+        return ComponentStatus::Success;
+    }
+
+    bool isClientStarted() const { return ntpStarted; }
+
+private:
+    void startClient() {
+        if (ntpStarted || !config.enabled) return;
 
         // Set timezone via HAL
         HAL::NTP::setTimezone(config.timezone.c_str());
@@ -153,14 +173,16 @@ public:
         
         // Initialize NTP client via HAL
         HAL::NTP::init(srv1, srv2, srv3);
+        ntpStarted = true;
         DLOG_I(LOG_NTP, "SNTP client started via HAL");
-
-        return ComponentStatus::Success;
     }
 
+public:
+
     ComponentStatus shutdown() override {
-        if (config.enabled) {
+        if (ntpStarted) {
             HAL::NTP::stop();
+            ntpStarted = false;
             DLOG_I(LOG_NTP, "SNTP client stopped via HAL");
         }
         return ComponentStatus::Success;
@@ -484,9 +506,12 @@ public:
             setTimezone(config.timezone);
         }
 
-        if (needsRestart && config.enabled) {
-            HAL::NTP::stop();
-            begin();
+        if (needsRestart) {
+            if (ntpStarted) {
+                HAL::NTP::stop();
+                ntpStarted = false;
+            }
+            if (config.enabled && (!__dc_eventBus || networkAvailable)) startClient();
         }
     }
 
@@ -515,6 +540,8 @@ private:
     NTPStatistics stats;
     bool synced;
     bool syncInProgress;
+    bool ntpStarted = false;
+    bool networkAvailable = false;
     uint32_t bootTime;
     SyncCallback syncCallback;
     Utils::NonBlockingDelay syncTimeoutTimer;  // Timer for sync timeout tracking

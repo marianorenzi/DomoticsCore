@@ -802,8 +802,9 @@ class DomoticsApp {
         const grid = document.getElementById('componentsGrid');
         if (!grid) return;
 
-        this.renderSection(this.WebUILocation.ComponentDetail, 'componentsGrid');
-
+        // ComponentDetail cards are rendered by renderUI(). Re-rendering them
+        // here restores schema defaults after SSE has applied live values. Since
+        // SSE sends deltas, unchanged contexts would then remain stale forever.
         let card = grid.querySelector('.components-card');
         if (!card) {
             card = document.createElement('div');

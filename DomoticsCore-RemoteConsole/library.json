@@ -20,6 +20,6 @@
   },
   "dependencies": [
     { "name": "DomoticsCore-Core", "version": ">=1.4.0" },
-    { "name": "DomoticsCore-Wifi", "version": ">=1.4.0" }
+    { "name": "DomoticsCore-Network", "version": ">=1.0.0" }
   ]
 }

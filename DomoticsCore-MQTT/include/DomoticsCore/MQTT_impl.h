@@ -63,6 +63,15 @@ inline ComponentStatus MQTTComponent::begin() {
     on<MQTTSubscribeEvent>(MQTTEvents::EVENT_SUBSCRIBE, [this](const MQTTSubscribeEvent& ev) {
         subscribe(ev.topic, ev.qos);
     });
+
+    if (__dc_eventBus) {
+        networkReadinessManaged = true;
+        on<NetworkEvents::NetworkAvailabilityEvent>(NetworkEvents::EVENT_READY,
+            [this](const NetworkEvents::NetworkAvailabilityEvent& event) {
+                networkAvailable = event.available;
+                if (networkAvailable) reconnectTimer.reset();
+            }, true);
+    }
     
     DLOG_D(LOG_MQTT, "EventBus listeners registered (mqtt/publish, mqtt/subscribe)");
     
@@ -88,9 +97,9 @@ inline ComponentStatus MQTTComponent::begin() {
     mqttClient->setKeepAlive(config.keepAlive);
     // Buffer size is now set at connection
     
-    // Auto-connect if enabled (components must work independently)
-    // System.h can ALSO trigger via WiFi events for better orchestration
-    if (config.autoReconnect) {
+    // Standalone usage has no EventBus readiness source. Managed components wait
+    // for network/ready and reconnect from loop().
+    if (config.autoReconnect && networkAvailable) {
         connect();
     }
     
@@ -110,7 +119,7 @@ inline void MQTTComponent::loop() {
         mqttClient->loop();
         updateStatistics();
         processMessageQueue();
-    } else if (config.enabled && config.autoReconnect) {
+    } else if (config.enabled && config.autoReconnect && networkAvailable) {
         // Only attempt reconnection when explicitly enabled
         handleReconnection();
     }
@@ -133,10 +142,9 @@ inline bool MQTTComponent::connect() {
         return true;
     }
     
-    // Check if WiFi is connected before attempting MQTT connection
-    if (!HAL::WiFiHAL::isConnected()) {
-        lastError = "WiFi not connected";
-        DLOG_D(LOG_MQTT, "Cannot connect to MQTT - WiFi not connected");
+    if (networkReadinessManaged && !networkAvailable) {
+        lastError = "Network unavailable";
+        DLOG_D(LOG_MQTT, "Cannot connect to MQTT - network unavailable");
         return false;
     }
     

@@ -10,6 +10,7 @@
   "platforms": ["espressif32", "espressif8266"],
   "build": {"includeDir": "include", "srcDir": "src", "lib_archive": false},
   "dependencies": {
+    "DomoticsCore-Network": ">=1.0.0",
     "bblanchon/ArduinoJson": ">=7.0.0",
     "ESP32Async/ESPAsyncWebServer": ">=3.8.0"
   },

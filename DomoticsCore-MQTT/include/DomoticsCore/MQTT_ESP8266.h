@@ -13,7 +13,7 @@
 #endif
 
 #include <PubSubClient.h>
-#include <ESP8266WiFi.h>
+#include <DomoticsCore/Network_HAL.h>
 
 namespace DomoticsCore {
 namespace HAL {
@@ -27,8 +27,8 @@ namespace MQTT {
 class MQTTClientImpl : public MQTTClient {
 private:
     PubSubClient client;
-    WiFiClient wifiClient;
-    WiFiClientSecure wifiClientSecure;
+    NetworkClient networkClient;
+    SecureNetworkClient secureNetworkClient;
     bool useTLS;
 
 public:
@@ -37,7 +37,7 @@ public:
      * @param useTLS_ Use TLS/SSL connection
      */
     explicit MQTTClientImpl(bool useTLS_ = false)
-        : client(useTLS_ ? (Client&)wifiClientSecure : (Client&)wifiClient)
+        : client(useTLS_ ? (Client&)secureNetworkClient : (Client&)networkClient)
         , useTLS(useTLS_) {}
 
     bool connect(const char* id,

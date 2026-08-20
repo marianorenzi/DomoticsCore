@@ -4,6 +4,7 @@
 #include <unity.h>
 #include <DomoticsCore/Core.h>
 #include <DomoticsCore/RemoteConsole.h>
+#include <DomoticsCore/NetworkEvents.h>
 #include <DomoticsCore/Testing/HeapTracker.h>
 
 using namespace DomoticsCore;
@@ -11,6 +12,23 @@ using namespace DomoticsCore::Components;
 
 // Test state
 static Core* testCore = nullptr;
+
+void test_remoteconsole_tracks_generic_provider_addresses() {
+    auto console = std::make_unique<RemoteConsoleComponent>();
+    RemoteConsoleComponent* consolePtr = console.get();
+    testCore->addComponent(std::move(console));
+    TEST_ASSERT_TRUE(testCore->begin());
+
+    NetworkEvents::NetworkProviderAddressEvent event{};
+    NetworkEvents::copyProviderId(event.providerId, "ethernet");
+    NetworkEvents::copyAddress(event.address, "192.168.1.10");
+    testCore->getEventBus().publish(NetworkEvents::EVENT_PROVIDER_ADDRESS_CHANGED, event);
+    testCore->loop();
+
+    const auto& addresses = consolePtr->getNetworkAddresses();
+    TEST_ASSERT_EQUAL_UINT32(1, addresses.size());
+    TEST_ASSERT_EQUAL_STRING("192.168.1.10", addresses.at("ethernet").c_str());
+}
 
 void setUp(void) {
     testCore = new Core();
@@ -395,7 +413,7 @@ void test_remoteconsole_auth_protocol_flow(void) {
     testCore->begin();
 
     // Simulate a client connection — returns a handle sharing state with the accepted copy
-    HAL::WiFiClient clientHandle = consolePtr->getServer()->simulateClient(true, 42);
+    HAL::NetworkClient clientHandle = consolePtr->getServer()->simulateClient(true, 42);
 
     // First loop: accept the client, send welcome
     testCore->loop();
@@ -612,8 +630,8 @@ void test_remoteconsole_memory_stability_multi_connect(void) {
 
     tracker.checkpoint("after");
 
-    // Tolerance 2048: setPort() creates/deletes WiFiServer objects (new/delete)
-    // causing glibc allocator overhead on native platform. WiFiClient uses
+    // Tolerance 2048: setPort() creates/deletes NetworkServer objects (new/delete)
+    // causing glibc allocator overhead on native platform. NetworkClient uses
     // shared_ptr for state, increasing per-client allocation.
     MemoryTestResult result = tracker.assertStable("before", "after", 2048);
     TEST_ASSERT_TRUE_MESSAGE(result.passed, result.message.c_str());
@@ -627,6 +645,7 @@ int main(int argc, char **argv) {
     UNITY_BEGIN();
 
     // Component creation tests
+    RUN_TEST(test_remoteconsole_tracks_generic_provider_addresses);
     RUN_TEST(test_remoteconsole_component_creation_default);
     RUN_TEST(test_remoteconsole_component_creation_with_config);
 
