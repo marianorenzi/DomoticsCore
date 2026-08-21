@@ -1,6 +1,7 @@
 #include <unity.h>
 #include <DomoticsCore/Core.h>
 #include <DomoticsCore/Network.h>
+#include <DomoticsCore/NetworkWebUI.h>
 #include <DomoticsCore/Storage.h>
 
 using namespace DomoticsCore;
@@ -29,6 +30,13 @@ public:
     String getNetworkType() const override { return "Test"; }
     String getConnectionStatus() const override { return connected_ ? "Connected" : "Disconnected"; }
     String getNetworkInfo() const override { return "{}"; }
+    bool setRoutePriority(int priority) override {
+        routePriority_ = priority;
+        routePriorityCalls_++;
+        return true;
+    }
+    int routePriority() const { return routePriority_; }
+    int routePriorityCalls() const { return routePriorityCalls_; }
 
     void setConnected(bool connected) {
         if (connected_ == connected) return;
@@ -48,6 +56,8 @@ private:
     }
     const char* id_;
     bool connected_;
+    int routePriority_ = -1;
+    int routePriorityCalls_ = 0;
 };
 
 void setUp() {}
@@ -196,6 +206,85 @@ void test_provider_address_event_has_bounded_copied_payload() {
     TEST_ASSERT_TRUE((std::is_trivially_copyable<NetworkEvents::NetworkProviderAddressEvent>::value));
 }
 
+void test_route_priorities_follow_inverse_order_and_reapply_after_change() {
+    Core core;
+    auto network = std::make_unique<NetworkComponent>();
+    auto* networkPtr = network.get();
+    auto wifi = std::make_unique<TestProvider>("wifi");
+    auto* wifiPtr = wifi.get();
+    auto ethernet = std::make_unique<TestProvider>("ethernet");
+    auto* ethernetPtr = ethernet.get();
+    core.addComponent(std::move(network));
+    core.addComponent(std::move(wifi));
+    core.addComponent(std::move(ethernet));
+    TEST_ASSERT_TRUE(core.begin());
+    core.loop();
+    core.loop();
+
+    TEST_ASSERT_GREATER_THAN(ethernetPtr->routePriority(), wifiPtr->routePriority());
+    int wifiCalls = wifiPtr->routePriorityCalls();
+    int ethernetCalls = ethernetPtr->routePriorityCalls();
+
+    TEST_ASSERT_TRUE(networkPtr->setPriorities({"ethernet", "wifi"}, false));
+    TEST_ASSERT_GREATER_THAN(wifiPtr->routePriority(), ethernetPtr->routePriority());
+    TEST_ASSERT_GREATER_THAN(wifiCalls, wifiPtr->routePriorityCalls());
+    TEST_ASSERT_GREATER_THAN(ethernetCalls, ethernetPtr->routePriorityCalls());
+}
+
+void test_network_webui_exposes_and_saves_ordered_priorities() {
+    Core core;
+    auto network = std::make_unique<NetworkComponent>();
+    auto* networkPtr = network.get();
+    core.addComponent(std::move(network));
+    core.addComponent(std::make_unique<TestProvider>("wifi"));
+    core.addComponent(std::make_unique<TestProvider>("ethernet"));
+    TEST_ASSERT_TRUE(core.begin());
+    core.loop();
+    core.loop();
+
+    WebUI::NetworkWebUI webui(networkPtr);
+    JsonDocument initial;
+    String initialJson = webui.getWebUIData("network_settings");
+    TEST_ASSERT_FALSE(deserializeJson(initial, initialJson));
+    TEST_ASSERT_EQUAL_STRING("wifi", initial["priorities"][0]);
+    TEST_ASSERT_EQUAL_STRING("ethernet", initial["priorities"][1]);
+
+    std::map<String, String> params{{"field", "priorities"},
+        {"value", "[\"ethernet\",\"wifi\"]"}};
+    JsonDocument response;
+    String responseJson = webui.handleWebUIRequest("network_settings", "/", "POST", params);
+    deserializeJson(response, responseJson);
+    TEST_ASSERT_TRUE(response["success"]);
+    TEST_ASSERT_EQUAL_STRING("ethernet", networkPtr->getPriorities()[0].c_str());
+    TEST_ASSERT_EQUAL_STRING("wifi", networkPtr->getPriorities()[1].c_str());
+}
+
+void test_network_webui_marks_priorities_dirty_on_provider_lifecycle() {
+    Core core;
+    auto network = std::make_unique<NetworkComponent>();
+    auto* networkPtr = network.get();
+    core.addComponent(std::move(network));
+    TEST_ASSERT_TRUE(core.begin());
+    WebUI::NetworkWebUI webui(networkPtr);
+    TEST_ASSERT_TRUE(webui.hasDataChanged("network_settings"));
+    TEST_ASSERT_FALSE(webui.hasDataChanged("network_settings"));
+
+    TestProvider ethernet("ethernet");
+    NetworkEvents::NetworkProviderRegisteredEvent registered{};
+    registered.provider = &ethernet;
+    NetworkEvents::copyProviderId(registered.providerId, "ethernet");
+    core.emit(NetworkEvents::EVENT_PROVIDER_REGISTERED, registered);
+    core.loop();
+    TEST_ASSERT_TRUE(webui.hasDataChanged("network_settings"));
+    TEST_ASSERT_FALSE(webui.hasDataChanged("network_settings"));
+
+    NetworkEvents::NetworkProviderIdEvent unregistered{};
+    NetworkEvents::copyProviderId(unregistered.providerId, "ethernet");
+    core.emit(NetworkEvents::EVENT_PROVIDER_UNREGISTERED, unregistered);
+    core.loop();
+    TEST_ASSERT_TRUE(webui.hasDataChanged("network_settings"));
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_registration_order_and_aggregate_ready_are_event_driven);
@@ -206,5 +295,8 @@ int main(int argc, char** argv) {
     RUN_TEST(test_repeated_priority_updates_remain_bounded);
     RUN_TEST(test_network_hal_and_wifi_compatibility_aliases_share_state);
     RUN_TEST(test_provider_address_event_has_bounded_copied_payload);
+    RUN_TEST(test_route_priorities_follow_inverse_order_and_reapply_after_change);
+    RUN_TEST(test_network_webui_exposes_and_saves_ordered_priorities);
+    RUN_TEST(test_network_webui_marks_priorities_dirty_on_provider_lifecycle);
     return UNITY_END();
 }

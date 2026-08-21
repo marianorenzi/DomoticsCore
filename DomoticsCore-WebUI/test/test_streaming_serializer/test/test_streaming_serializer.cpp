@@ -223,7 +223,7 @@ void test_option_labels_across_chunk_boundaries(void) {
 
 void test_multiselect_value_is_json_array(void) {
     WebUIField field("networks", "Networks", WebUIFieldType::Multiselect);
-    field.choices({"office,5g", "guest"}).values({"office,5g", "guest"});
+    field.choices({"office,5g", "guest"}, true);
     WebUIContext ctx = WebUIContext::settings("network_test", "Network Test")
         .withField(field);
 
@@ -235,6 +235,40 @@ void test_multiselect_value_is_json_array(void) {
     TEST_ASSERT_EQUAL(2, values.size());
     TEST_ASSERT_EQUAL_STRING("office,5g", values[0].as<const char*>());
     TEST_ASSERT_EQUAL_STRING("guest", values[1].as<const char*>());
+}
+
+void test_multi_values_across_chunk_boundaries(void) {
+    WebUIField field("priorities", "Priorities", WebUIFieldType::OrderedList);
+    field.addOption("ethernet-long", "Ethernet", true)
+         .addOption("wifi\"quoted", "WiFi", true)
+         .addOption("cellular\\backup", "Cellular", true);
+    WebUIContext ctx = WebUIContext::settings("network_test", "Network Test")
+        .withField(field);
+
+    for (size_t chunkSize = 2; chunkSize <= 32; ++chunkSize) {
+        StreamingContextSerializer serializer;
+        serializer.begin(ctx);
+        std::string json;
+        std::vector<uint8_t> buffer(chunkSize);
+        size_t iterations = 0;
+
+        while (!serializer.isComplete() && iterations++ < 4096) {
+            size_t written = serializer.write(buffer.data(), buffer.size());
+            json.append(reinterpret_cast<const char*>(buffer.data()), written);
+        }
+
+        TEST_ASSERT_TRUE_MESSAGE(serializer.isComplete(),
+                                 "Multi-value serialization must complete for every chunk size");
+        JsonDocument doc;
+        TEST_ASSERT_EQUAL_MESSAGE(DeserializationError::Ok,
+                                  deserializeJson(doc, json).code(),
+                                  "Multi-value JSON must remain valid across chunk boundaries");
+        JsonArray values = doc["fields"][0]["value"].as<JsonArray>();
+        TEST_ASSERT_EQUAL_UINT32(3, values.size());
+        TEST_ASSERT_EQUAL_STRING("ethernet-long", values[0].as<const char*>());
+        TEST_ASSERT_EQUAL_STRING("wifi\"quoted", values[1].as<const char*>());
+        TEST_ASSERT_EQUAL_STRING("cellular\\backup", values[2].as<const char*>());
+    }
 }
 
 // Test CachingWebUIProvider returns same cached contexts
@@ -407,6 +441,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_field_with_options);
     RUN_TEST(test_option_labels_across_chunk_boundaries);
     RUN_TEST(test_multiselect_value_is_json_array);
+    RUN_TEST(test_multi_values_across_chunk_boundaries);
     RUN_TEST(test_caching_provider_caches_contexts);
     RUN_TEST(test_serialize_multiple_contexts);
     RUN_TEST(test_chunked_serialization);

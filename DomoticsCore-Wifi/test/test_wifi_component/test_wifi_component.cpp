@@ -261,6 +261,12 @@ void test_wifi_inetworkprovider_getconnectionstatus(void) {
     TEST_ASSERT_TRUE(status.length() > 0);
 }
 
+void test_wifi_inetworkprovider_applies_route_priority(void) {
+    WifiComponent wifi;
+    TEST_ASSERT_TRUE(wifi.setRoutePriority(108));
+    TEST_ASSERT_EQUAL_INT(108, HAL::WiFiImpl::getRoutePriorityForTest());
+}
+
 void test_wifi_publishes_provider_address_event(void) {
     bool received = false;
     String providerId;
@@ -624,6 +630,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_wifi_inetworkprovider_isconnected);
     RUN_TEST(test_wifi_inetworkprovider_getlocalip);
     RUN_TEST(test_wifi_inetworkprovider_getconnectionstatus);
+    RUN_TEST(test_wifi_inetworkprovider_applies_route_priority);
     RUN_TEST(test_wifi_publishes_provider_address_event);
 
     // Mode detection tests

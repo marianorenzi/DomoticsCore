@@ -13,7 +13,9 @@ namespace HAL {
 namespace WiFiImpl {
 
 inline bool stubbedConnected = false;
+inline int stubbedRoutePriority = -1;
 inline void setConnectedForTest(bool connected) { stubbedConnected = connected; }
+inline int getRoutePriorityForTest() { return stubbedRoutePriority; }
 
 inline void init() {}
 inline void setMode(WiFiHAL::Mode) {}
@@ -40,6 +42,7 @@ inline int16_t scanComplete() { return 0; }
 inline void scanDelete() {}
 inline void disconnectAndOff() {}
 inline uint8_t getRawStatus() { return 0; }
+inline bool setRoutePriority(int priority) { stubbedRoutePriority = priority; return true; }
 
 } // namespace WiFiImpl
 

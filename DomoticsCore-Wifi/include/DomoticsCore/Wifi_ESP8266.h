@@ -88,6 +88,7 @@ inline int16_t scanComplete() { return WiFi.scanComplete(); }
 inline void scanDelete() { WiFi.scanDelete(); }
 inline void disconnectAndOff() { WiFi.disconnect(true); WiFi.mode(WIFI_OFF); }
 inline uint8_t getRawStatus() { return (uint8_t)WiFi.status(); }
+inline bool setRoutePriority(int) { return false; }
 
 } // namespace WiFiImpl
 

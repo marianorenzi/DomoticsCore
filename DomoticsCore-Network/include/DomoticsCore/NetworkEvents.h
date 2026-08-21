@@ -12,7 +12,6 @@ static constexpr const char* EVENT_PROVIDER_REGISTERED = "network/provider/regis
 static constexpr const char* EVENT_PROVIDER_UNREGISTERED = "network/provider/unregistered";
 static constexpr const char* EVENT_PROVIDER_STATE_CHANGED = "network/provider/state-changed";
 static constexpr const char* EVENT_PROVIDER_ADDRESS_CHANGED = "network/provider/address-changed";
-static constexpr const char* EVENT_CONFIG_CHANGED = "network/config/changed";
 static constexpr const char* EVENT_READY = "network/ready";
 
 static constexpr size_t PROVIDER_ID_CAPACITY = 24;
@@ -38,11 +37,6 @@ struct NetworkProviderAddressEvent {
     char address[ADDRESS_CAPACITY];
 };
 
-struct NetworkPriorityChangedEvent {
-    uint8_t count;
-    char providerIds[MAX_PRIORITY_ITEMS][PROVIDER_ID_CAPACITY];
-};
-
 inline void copyProviderId(char (&destination)[PROVIDER_ID_CAPACITY], const char* source) {
     std::memset(destination, 0, sizeof(destination));
     if (source) std::strncpy(destination, source, sizeof(destination) - 1);
@@ -58,7 +52,6 @@ static_assert(std::is_trivially_copyable<NetworkProviderIdEvent>::value, "event 
 static_assert(std::is_trivially_copyable<NetworkProviderStateEvent>::value, "event payload must be trivial");
 static_assert(std::is_trivially_copyable<NetworkAvailabilityEvent>::value, "event payload must be trivial");
 static_assert(std::is_trivially_copyable<NetworkProviderAddressEvent>::value, "event payload must be trivial");
-static_assert(std::is_trivially_copyable<NetworkPriorityChangedEvent>::value, "event payload must be trivial");
 
 } // namespace NetworkEvents
 } // namespace DomoticsCore

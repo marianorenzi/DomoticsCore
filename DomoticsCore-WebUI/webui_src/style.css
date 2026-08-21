@@ -269,7 +269,7 @@ body {
 .field-label { font-weight: 500; color: var(--text-secondary); }
 .field-value { color: var(--text-primary); font-weight: 600; }
 
-.field-row-multiselect {
+.field-row-multiselect, .field-row-ordered-list {
   flex-direction: column;
   align-items: stretch;
   gap: 0.5rem;
@@ -542,4 +542,34 @@ input:checked + .slider:before {
   font-size: 1.25rem;
   font-weight: 600;
   color: var(--primary-color);
+}
+
+.ordered-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.ordered-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+}
+
+.ordered-list.editing .ordered-list-item {
+  cursor: grab;
+}
+
+.ordered-list-item.dragging {
+  opacity: 0.5;
+}
+
+.drag-handle {
+  color: var(--text-secondary);
+  user-select: none;
 }

@@ -18,6 +18,7 @@ namespace DomoticsCore {
 namespace Components {
 
 class NetworkComponent : public IComponent {
+    static constexpr int ROUTE_PRIORITY_BASE = 100;
     struct ProviderSnapshot {
         String id;
         INetworkProvider* provider;
@@ -44,11 +45,13 @@ public:
 
     void afterAllComponentsReady() override {
         loadPriorities();
+        applyRoutePriorities();
         publishReady();
     }
     void loop() override {}
     ComponentStatus shutdown() override {
         providers_.clear();
+        providers_.shrink_to_fit();
         if (ready_) { ready_ = false; publishReady(); }
         setStatus(ComponentStatus::Success);
         return ComponentStatus::Success;
@@ -69,7 +72,7 @@ public:
         priorities_ = clean;
         for (const auto& provider : providers_) appendPriority(provider.id);
         if (persist) savePriorities();
-        publishPriorities();
+        applyRoutePriorities();
         return true;
     }
 
@@ -111,13 +114,14 @@ private:
         providers_.push_back({String(event.providerId), event.provider, event.provider->isConnected()});
         if (appendPriority(event.providerId)) {
             savePriorities();
-            publishPriorities();
         }
+        applyRoutePriority(providers_.back());
         evaluateReady();
     }
     void unregisterProvider(const char* id) {
         providers_.erase(std::remove_if(providers_.begin(), providers_.end(),
             [&](const ProviderSnapshot& provider) { return provider.id == id; }), providers_.end());
+        providers_.shrink_to_fit();
         evaluateReady();
     }
     void updateProviderState(const NetworkEvents::NetworkProviderStateEvent& event) {
@@ -144,12 +148,17 @@ private:
         NetworkEvents::NetworkAvailabilityEvent event{ready_};
         emit(NetworkEvents::EVENT_READY, event, true);
     }
-    void publishPriorities() {
-        NetworkEvents::NetworkPriorityChangedEvent event{};
-        event.count = uint8_t(priorities_.size());
-        for (size_t i = 0; i < priorities_.size(); ++i)
-            NetworkEvents::copyProviderId(event.providerIds[i], priorities_[i].c_str());
-        emit(NetworkEvents::EVENT_CONFIG_CHANGED, event);
+    int routePriorityFor(const String& id) const {
+        auto it = std::find(priorities_.begin(), priorities_.end(), id);
+        if (it == priorities_.end()) return ROUTE_PRIORITY_BASE;
+        size_t index = size_t(std::distance(priorities_.begin(), it));
+        return ROUTE_PRIORITY_BASE + int(NetworkEvents::MAX_PRIORITY_ITEMS - index);
+    }
+    void applyRoutePriority(const ProviderSnapshot& provider) {
+        if (provider.provider) provider.provider->setRoutePriority(routePriorityFor(provider.id));
+    }
+    void applyRoutePriorities() {
+        for (const auto& provider : providers_) applyRoutePriority(provider);
     }
     String serializePriorities() const {
         String value;

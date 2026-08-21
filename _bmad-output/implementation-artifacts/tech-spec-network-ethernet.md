@@ -75,7 +75,8 @@ Hardware configuration and IP configuration MUST be separate.
 - Network providers are regular `IComponent` instances owned by `Core`.
 - External providers such as Ethernet are created in the application, added through `System::getCore().addComponent()`, and initialized by the normal Core lifecycle.
 - Providers announce themselves through EventBus from `afterAllComponentsReady()`; direct calls to `NetworkComponent::registerProvider()` are forbidden.
-- `INetworkProvider` is query-only. Each implementing component emits its own registration and state-change events.
+- `INetworkProvider` exposes provider state plus the generic route-priority operation. Each
+  implementing component emits its own registration and state-change events.
 - Providers added before `System::begin()` may announce themselves at any point after their
   initialization; the provider list and WebUI MUST update without schema invalidation.
 - Runtime component removal MUST unregister the provider before destroying it. Adding and
@@ -92,24 +93,41 @@ Hardware configuration and IP configuration MUST be separate.
 - Priority precedence is: persisted order, `SystemConfig.networkPriorities`, then provider registration order.
 - An empty default means registration order; a non-empty order seeds the first boot only when no persisted order exists.
 - Registered providers missing from the configured order are appended. Configured but absent providers retain their position.
-- Priorities do not select an active provider and do not modify lwIP routing in the initial implementation.
+- `NetworkComponent` translates the ordered list to routing priorities: the first provider receives
+  the highest value and each following provider a lower value (the inverse of its list index).
+- `NetworkComponent` calls `INetworkProvider::setRoutePriority()` after loading persisted priority,
+  after every successful `setPriorities()`, and when a provider registers. Each provider applies the
+  generic value to every lwIP interface it owns; WiFi is treated as one provider in this version.
+- Routing priority does not introduce a singular active-provider concept or explicitly force a
+  default interface with `setDefault()`.
 - All registered providers may operate simultaneously. No singular active-provider concept is introduced.
-- Routing and failover policy are deferred to the dedicated Failover stage.
+- Health checks, explicit default-interface selection, connection migration, and failover policy are
+  deferred to the dedicated Failover stage.
 
 ### 4.3 Network WebUI
 
 `NetworkWebUI` MUST:
 
 - Show every registered provider, connection status, and local IP.
-- Use `WebUIFieldType::DynamicOrderedList` to edit priority.
+- Use `WebUIFieldType::OrderedList` to edit priority.
 - Accept providers registered after WebUI initialization.
 - Persist order through the existing Storage integration.
-- Notify `NetworkComponent` through EventBus when configuration changes.
+- Listen to `network/provider/registered` and `network/provider/unregistered`, query the current
+  priorities from `NetworkComponent`, and refresh the field so machine-level late registration is
+  visible without invalidating the schema.
+- On save, pass the ordered `value` list directly to `NetworkComponent::setPriorities()`. Priority
+  changes do not require request or confirmation events on EventBus.
 
-`DynamicOrderedList` is generic. Its schema is static and its runtime data is an ordered array of
-`{value, label}` items, matching the value/label terminology used by `Select` options. It does not
-contain an enabled flag or provider status. Disabling Ethernet or another provider is done by
-disabling its component. Runtime item changes MUST NOT invalidate the cached WebUI schema.
+`OrderedList` is generic. Its schema uses `options` and `optionLabels`, matching the terminology and
+helpers used by `Select`; its multi-value `value` is an ordered array of stable IDs. In this version
+the provider ID is also the fallback presentation label; a future
+`INetworkProvider::getProviderLabel()` may populate `optionLabels` without changing the stable value.
+Presentation uses drag-and-drop.
+The UI and generic WebUI field do not validate the order; `NetworkComponent::setPriorities()` is the
+validation authority. Cancel is local and restores the values captured when editing began; updates
+during editing are outside scope. The field does not contain an enabled flag or provider status.
+Disabling Ethernet or another provider is done by disabling its component. Runtime item changes
+MUST NOT invalidate the cached WebUI schema.
 
 ### 4.4 Generic events
 
@@ -121,8 +139,10 @@ Required events:
 - `network/provider/unregistered`
 - `network/provider/state-changed`
 - `network/provider/address-changed`
-- `network/config/changed`
 - `network/ready`
+
+No EventBus request or confirmation event is required for priority changes. Provider registration
+and unregistration events are sufficient for `NetworkWebUI` to refresh the runtime list.
 
 `network/ready` MUST be sticky and carry the current aggregate Boolean state: `true` when at least
 one provider is connected and `false` otherwise. A separate sticky `network/not-ready` event MUST
@@ -174,7 +194,8 @@ therefore removes that WiFi-owned constant and publication points, and transfers
 
 ## 5. `INetworkProvider`
 
-The interface remains small and reports provider state. It MUST support the current WiFi implementation and Ethernet without introducing Internet-specific concepts.
+The interface remains small and reports provider state plus generic route priority. It MUST support
+the current WiFi implementation and Ethernet without introducing Internet-specific concepts.
 
 Required operations:
 
@@ -188,12 +209,14 @@ public:
     virtual String getNetworkType() const = 0;
     virtual String getConnectionStatus() const = 0;
     virtual String getNetworkInfo() const = 0;
+    virtual bool setRoutePriority(int priority) = 0;
     virtual int32_t getSignalStrength() const { return 0; }
     virtual String getMacAddress() const { return ""; }
 };
 ```
 
-Future route selection remains a `NetworkComponent`/Network HAL responsibility and MUST NOT expand `INetworkProvider` with Arduino-ESP32-specific concepts.
+`NetworkComponent` owns route ordering, while each provider translates `setRoutePriority()` to the
+native interfaces it owns. The interface MUST NOT expose Arduino-ESP32 or `esp_netif` types.
 
 `INetworkProvider` MUST NOT publish events or depend on `IComponent`. Components implementing it are responsible for publishing registration and state-change events through their existing `IComponent` EventBus access.
 
@@ -366,8 +389,16 @@ selection, and failover remain in their later stages.
 
 ### Stage 4 — Network priority configuration
 
-- Implement and test `WebUIFieldType::DynamicOrderedList` with runtime `{value, label}` items.
-- Implement `NetworkWebUI`, persistence, reordering, and late provider updates without schema invalidation.
+Status: implemented. Network and WebUI native suites pass, and the FullStack ESP32-C3 build passes
+with pioarduino `55.03.32`. The pre-existing WiFi metadata-version assertion remains deferred until
+the coordinated version update before the PR.
+
+- [x] Implement and test the drag-and-drop `WebUIFieldType::OrderedList` with an ordered array of
+  provider IDs, `options`/`optionLabels` schema metadata, and local baseline restoration on Cancel.
+- [x] Implement `NetworkWebUI`, direct `setPriorities()` updates, persistence, and refresh on provider
+  registration/unregistration without schema invalidation.
+- [x] Add `INetworkProvider::setRoutePriority()` and have `NetworkComponent` apply inverse-index routing
+  priorities after loading, reordering, and provider registration.
 
 ### Stage 5 — DomoticsCore-Ethernet
 
@@ -384,7 +415,9 @@ selection, and failover remain in their later stages.
 ### Stage 7 — Failover
 
 - Define and implement failover after the previous stages are complete.
-- Selection criteria, Internet reachability checks, route priorities, default-interface changes, and persistent-connection behavior remain pending definition.
+- Selection criteria, reachability checks, explicit default-interface changes, and
+  persistent-connection behavior remain pending definition. Basic lwIP route priority ordering is
+  implemented in Stage 4.
 
 ### Stage 8 — Hardware validation
 
@@ -507,7 +540,10 @@ The startup lifecycle supports event-driven registration:
 
 WebUI discovers existing providers and component lifecycle listeners during initialization. A
 future `NetworkWebUI` can therefore keep a static schema while reading a dynamic provider list.
-`DynamicOrderedList` runtime entries use `{value, label}`.
+`OrderedList` runtime values are provider ID strings. Schema options use the same IDs, with
+`optionLabels` reserved for presentation labels. `NetworkWebUI` listens to registration and
+unregistration to refresh the runtime value; priority editing itself uses a direct
+`NetworkComponent::setPriorities()` call and does not add EventBus topics.
 
 General hot-add remains outside scope: current `Core::addComponent()` after initialization does not
 run `begin()`, dependency resolution, or readiness hooks. Runtime removal is supported because the

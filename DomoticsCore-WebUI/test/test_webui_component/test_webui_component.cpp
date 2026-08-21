@@ -172,13 +172,30 @@ void test_webui_field_all_types() {
     WebUIField f13("m", "M", WebUIFieldType::Password);
     WebUIField f14("n", "N", WebUIFieldType::File);
     WebUIField f15("o", "O", WebUIFieldType::Multiselect);
+    WebUIField f16("p", "P", WebUIFieldType::OrderedList);
 
-    TEST_ASSERT_EQUAL(14, static_cast<int>(f15.type));
+    TEST_ASSERT_EQUAL(15, static_cast<int>(f16.type));
 
     TEST_ASSERT_EQUAL(WebUIFieldType::Text, f1.type);
     TEST_ASSERT_EQUAL(WebUIFieldType::Number, f2.type);
     TEST_ASSERT_EQUAL(WebUIFieldType::File, f14.type);
     TEST_ASSERT_EQUAL(WebUIFieldType::Multiselect, f15.type);
+    TEST_ASSERT_EQUAL(WebUIFieldType::OrderedList, f16.type);
+    TEST_ASSERT_FALSE(f1.isMultiValue());
+    TEST_ASSERT_TRUE(f15.isMultiValue());
+    TEST_ASSERT_TRUE(f16.isMultiValue());
+}
+
+void test_ordered_list_values_survive_field_copy() {
+    WebUIField original("order", "Order", WebUIFieldType::OrderedList);
+    original.addOption("ethernet", "Ethernet", true)
+            .addOption("wifi", "WiFi", true);
+
+    WebUIField copy(original);
+    TEST_ASSERT_EQUAL_UINT32(2, copy.values.size());
+    TEST_ASSERT_EQUAL_STRING("ethernet", copy.values[0].c_str());
+    TEST_ASSERT_EQUAL_STRING("wifi", copy.values[1].c_str());
+    TEST_ASSERT_EQUAL_STRING("Ethernet", copy.optionLabels["ethernet"].c_str());
 }
 
 // ============================================================================
@@ -874,6 +891,30 @@ void test_streaming_serializer_field_with_options() {
 
     JsonObject optionLabels = fields[0]["optionLabels"].as<JsonObject>();
     TEST_ASSERT_EQUAL_STRING("Automatic", optionLabels["auto"].as<const char*>());
+}
+
+void test_streaming_serializer_ordered_list_value_is_array() {
+    WebUIField field("priorities", "Priorities", WebUIFieldType::OrderedList);
+    field.addOption("ethernet", "Ethernet", true)
+         .addOption("wifi", "WiFi", true);
+    auto context = WebUIContext::settings("network_settings", "Network").withField(field);
+    StreamingContextSerializer serializer;
+    serializer.begin(context);
+    uint8_t buffer[4096];
+    size_t totalWritten = 0;
+    while (!serializer.isComplete() && totalWritten < sizeof(buffer) - 1) {
+        size_t written = serializer.write(buffer + totalWritten, sizeof(buffer) - 1 - totalWritten);
+        if (!written) break;
+        totalWritten += written;
+    }
+    buffer[totalWritten] = '\0';
+    JsonDocument document;
+    TEST_ASSERT_FALSE(deserializeJson(document, reinterpret_cast<char*>(buffer)));
+    JsonArray value = document["fields"][0]["value"].as<JsonArray>();
+    TEST_ASSERT_EQUAL_UINT32(2, value.size());
+    TEST_ASSERT_EQUAL_STRING("ethernet", value[0]);
+    TEST_ASSERT_EQUAL_STRING("wifi", value[1]);
+    TEST_ASSERT_EQUAL_STRING("Ethernet", document["fields"][0]["optionLabels"]["ethernet"]);
 }
 
 // ============================================================================
@@ -2411,6 +2452,7 @@ int main() {
     RUN_TEST(test_webui_field_fluent_api);
     RUN_TEST(test_webui_field_copy_constructor);
     RUN_TEST(test_webui_field_all_types);
+    RUN_TEST(test_ordered_list_values_survive_field_copy);
 
     // WebUIContext tests
     RUN_TEST(test_webui_context_basic_construction);
@@ -2465,6 +2507,7 @@ int main() {
     RUN_TEST(test_streaming_serializer_chunked_output);
     RUN_TEST(test_streaming_serializer_json_escaping);
     RUN_TEST(test_streaming_serializer_field_with_options);
+    RUN_TEST(test_streaming_serializer_ordered_list_value_is_array);
 
     // Memory stability tests (heap leak detection)
     RUN_TEST(test_streaming_serializer_no_memory_leak);

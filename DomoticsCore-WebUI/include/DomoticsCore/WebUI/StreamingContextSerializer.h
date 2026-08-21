@@ -84,7 +84,7 @@ private:
         Name, NameValue, NameComma,
         Label, LabelValue, LabelComma,
         Type, TypeValue, TypeComma,
-        Value, ValueValue, ValueComma,
+        Value, ValueValue, ValuesArrayOpen, ValuesArrayValue, ValuesArrayComma, ValuesArrayClose, ValueComma,
         Unit, UnitValue, UnitComma,
         ReadOnly, ReadOnlyValue, ReadOnlyComma,
         MinValue, MinValueValue, MinValueComma,
@@ -98,7 +98,7 @@ private:
         Complete
     };
     FieldState fieldState = FieldState::OpenBrace;
-    size_t optionIndex = 0;
+    size_t arrayIndex = 0;
 
     // Temporary number buffer for integer conversions
     char numBuf[16];
@@ -135,7 +135,7 @@ public:
         literalOffset = 0;
         fieldIndex = 0;
         fieldState = FieldState::OpenBrace;
-        optionIndex = 0;
+        arrayIndex = 0;
         totalBytesWritten_ = 0;
         chunkCount_ = 0;
     }
@@ -379,7 +379,7 @@ public:
                     if (isLiteralComplete()) {
                         state = State::FieldObject;
                         fieldState = FieldState::OpenBrace;
-                        optionIndex = 0;
+                        arrayIndex = 0;
                     }
                     break;
 
@@ -694,22 +694,46 @@ private:
 
                 case FieldState::Value:
                     n = writeLiteral(buffer + written, remaining, "\"value\":");
-                    if (isLiteralComplete()) fieldState = FieldState::ValueValue;
+                    if (isLiteralComplete()) {
+                        arrayIndex = 0;
+                        fieldState = field.isMultiValue()
+                            ? FieldState::ValuesArrayOpen
+                            : FieldState::ValueValue;
+                    }
                     break;
 
                 case FieldState::ValueValue:
-                    if (field.type == WebUIFieldType::Multiselect) {
-                        JsonDocument valuesDoc;
-                        JsonArray values = valuesDoc.to<JsonArray>();
-                        for (const String& value : field.selectedValues) values.add(value);
-                        String serializedValues;
-                        serializeJson(valuesDoc, serializedValues);
-                        n = writeLiteral(buffer + written, remaining, serializedValues.c_str());
-                        if (isLiteralComplete()) fieldState = FieldState::ValueComma;
+                    n = writeJsonString(buffer + written, remaining, field.getValueCStr());
+                    if (stringOffset == 0) fieldState = FieldState::ValueComma;
+                    break;
+
+                case FieldState::ValuesArrayOpen:
+                    n = writeLiteral(buffer + written, remaining, "[");
+                    if (isLiteralComplete()) fieldState = FieldState::ValuesArrayValue;
+                    break;
+
+                case FieldState::ValuesArrayValue:
+                    if (arrayIndex < field.values.size()) {
+                        n = writeJsonString(buffer + written, remaining, field.values[arrayIndex]);
+                        if (stringOffset == 0) {
+                            arrayIndex++;
+                            fieldState = arrayIndex < field.values.size()
+                                ? FieldState::ValuesArrayComma
+                                : FieldState::ValuesArrayClose;
+                        }
                     } else {
-                        n = writeJsonString(buffer + written, remaining, field.getValueCStr());
-                        if (stringOffset == 0) fieldState = FieldState::ValueComma;
+                        fieldState = FieldState::ValuesArrayClose;
                     }
+                    break;
+
+                case FieldState::ValuesArrayComma:
+                    n = writeLiteral(buffer + written, remaining, ",");
+                    if (isLiteralComplete()) fieldState = FieldState::ValuesArrayValue;
+                    break;
+
+                case FieldState::ValuesArrayClose:
+                    n = writeLiteral(buffer + written, remaining, "]");
+                    if (isLiteralComplete()) fieldState = FieldState::ValueComma;
                     break;
 
                 case FieldState::ValueComma:
@@ -793,7 +817,7 @@ private:
                 case FieldState::OptionsCheck:
                     if (!field.options.empty()) {
                         fieldState = FieldState::OptionsKey;
-                        optionIndex = 0;
+                        arrayIndex = 0;
                     } else {
                         fieldState = FieldState::OptionLabelsCheck;
                     }
@@ -810,11 +834,11 @@ private:
                     break;
 
                 case FieldState::OptionValue:
-                    if (optionIndex < field.options.size()) {
-                        n = writeJsonString(buffer + written, remaining, field.options[optionIndex]);
+                    if (arrayIndex < field.options.size()) {
+                        n = writeJsonString(buffer + written, remaining, field.options[arrayIndex]);
                         if (stringOffset == 0) {
-                            optionIndex++;
-                            if (optionIndex < field.options.size()) {
+                            arrayIndex++;
+                            if (arrayIndex < field.options.size()) {
                                 fieldState = FieldState::OptionComma;
                             } else {
                                 fieldState = FieldState::OptionsArrayClose;
@@ -839,7 +863,7 @@ private:
                 case FieldState::OptionLabelsCheck:
                     if (!field.optionLabels.empty()) {
                         fieldState = FieldState::OptionLabelsKey;
-                        optionIndex = 0;
+                        arrayIndex = 0;
                     } else {
                         fieldState = FieldState::CloseBrace;
                     }
@@ -857,7 +881,7 @@ private:
 
                 case FieldState::OptionLabelKey: {
                     auto it = field.optionLabels.begin();
-                    std::advance(it, optionIndex);
+                    std::advance(it, arrayIndex);
                     if (it != field.optionLabels.end()) {
                         n = writeJsonString(buffer + written, remaining, it->first);
                         if (stringOffset == 0) {
@@ -876,12 +900,12 @@ private:
 
                 case FieldState::OptionLabelValue: {
                     auto it = field.optionLabels.begin();
-                    std::advance(it, optionIndex);
+                    std::advance(it, arrayIndex);
                     if (it != field.optionLabels.end()) {
                         n = writeJsonString(buffer + written, remaining, it->second);
                         if (stringOffset == 0) {
-                            optionIndex++;
-                            fieldState = optionIndex < field.optionLabels.size()
+                            arrayIndex++;
+                            fieldState = arrayIndex < field.optionLabels.size()
                                 ? FieldState::OptionLabelComma
                                 : FieldState::OptionLabelsClose;
                         }

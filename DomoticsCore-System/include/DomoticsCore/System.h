@@ -149,7 +149,7 @@ public:
         
         // 4. Register WebUI providers
         if (HAL::getFreeHeap() >= MIN_HEAP_POST_INIT) {
-            SystemHelpers::setupWebUIProviders(core, config, webUIProviders, wifi, console);
+            SystemHelpers::setupWebUIProviders(core, config, webUIProviders, network, wifi, console);
         } else {
             DLOG_W(LOG_SYSTEM, "Low heap (%u), skipping WebUI providers", (unsigned)HAL::getFreeHeap());
         }

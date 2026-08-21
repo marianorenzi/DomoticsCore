@@ -27,6 +27,13 @@
 #include <DomoticsCore/WebUI.h>
 #define WEBUI_SETUP_HAS_WEBUI 1
 
+  #if __has_include(<DomoticsCore/NetworkWebUI.h>)
+  #include <DomoticsCore/NetworkWebUI.h>
+  #define WEBUI_SETUP_HAS_NETWORK_WEBUI 1
+  #else
+  #define WEBUI_SETUP_HAS_NETWORK_WEBUI 0
+  #endif
+
   #if __has_include(<DomoticsCore/WifiWebUI.h>)
   #include <DomoticsCore/WifiWebUI.h>
   #define WEBUI_SETUP_HAS_WIFI_WEBUI 1
@@ -122,6 +129,9 @@ namespace SystemHelpers {
  */
 struct WebUIProviders {
 #if WEBUI_SETUP_HAS_WEBUI
+  #if WEBUI_SETUP_HAS_NETWORK_WEBUI
+    Components::WebUI::NetworkWebUI* network = nullptr;
+  #endif
   #if WEBUI_SETUP_HAS_WIFI_WEBUI
     Components::WebUI::WifiWebUI* wifi = nullptr;
   #endif
@@ -147,6 +157,9 @@ struct WebUIProviders {
     
     void cleanup() {
 #if WEBUI_SETUP_HAS_WEBUI
+  #if WEBUI_SETUP_HAS_NETWORK_WEBUI
+        delete network; network = nullptr;
+  #endif
   #if WEBUI_SETUP_HAS_WIFI_WEBUI
         delete wifi; wifi = nullptr;
   #endif
@@ -179,6 +192,7 @@ inline void setupWebUIProviders(
     Core& core,
     SystemConfig& config,
     WebUIProviders& providers,
+    Components::NetworkComponent* network,
     Components::WifiComponent* wifi,
     Components::RemoteConsoleComponent* console
 ) {
@@ -199,6 +213,17 @@ inline void setupWebUIProviders(
     
 #if WEBUI_SETUP_HAS_STORAGE
     auto* storage = core.getComponent<Components::StorageComponent>("Storage");
+#endif
+
+    // Generic Network WebUI provider
+#if WEBUI_SETUP_HAS_NETWORK_WEBUI
+    if (HAL::getFreeHeap() < MIN_HEAP_PER_PROVIDER) {
+        DLOG_W(LOG_WEBUI_SETUP, "Heap low (%u), skipping Network WebUI provider", HAL::getFreeHeap());
+    } else if (network) {
+        providers.network = new Components::WebUI::NetworkWebUI(network);
+        webuiComponent->registerProviderWithComponent(providers.network, network);
+        DLOG_I(LOG_WEBUI_SETUP, "Network WebUI provider registered (heap: %u)", HAL::getFreeHeap());
+    }
 #endif
     
     // WiFi WebUI provider

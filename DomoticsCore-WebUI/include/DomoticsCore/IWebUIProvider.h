@@ -129,7 +129,8 @@ enum class WebUIFieldType {
     Progress,          // Progress value
     Password,          // Password input
     File,              // File upload input
-    Multiselect        // Multi-line multiple selection
+    Multiselect,       // Multi-line multiple selection
+    OrderedList        // Runtime list reordered with drag-and-drop
 };
 
 /**
@@ -144,6 +145,7 @@ struct WebUIField {
     String label;                   // Display label (dynamic storage)
     WebUIFieldType type;            // Field type
     String value;                   // Default value (dynamic storage)
+    std::vector<String> values;     // Default values for multi-value fields
     String unit;                    // Unit of measurement (dynamic storage)
     bool readOnly;                  // Read-only flag
     
@@ -157,8 +159,7 @@ struct WebUIField {
     // Constraints and options
     float minValue = 0;
     float maxValue = 100;
-    std::vector<String> options;    // For select fields (option values)
-    std::vector<String> selectedValues; // For multiselect fields
+    std::vector<String> options;    // Available option values
     std::map<String, String> optionLabels;  // Option value -> label mapping
     String endpoint;                // API endpoint for updates (dynamic storage)
 
@@ -180,13 +181,13 @@ struct WebUIField {
 
     // Copy constructor - preserves hybrid state
     WebUIField(const WebUIField& other)
-        : name(other.name), label(other.label), type(other.type), value(other.value),
+        : name(other.name), label(other.label), type(other.type), value(other.value), values(other.values),
           unit(other.unit), readOnly(other.readOnly),
           namePtr(other.namePtr), labelPtr(other.labelPtr),
           valuePtr(other.valuePtr), unitPtr(other.unitPtr),
           endpointPtr(other.endpointPtr),
           minValue(other.minValue), maxValue(other.maxValue),
-          options(other.options), selectedValues(other.selectedValues), optionLabels(other.optionLabels),
+          options(other.options), optionLabels(other.optionLabels),
           endpoint(other.endpoint) {
         if (other.config) {
             config = std::make_unique<JsonDocument>(*other.config);
@@ -200,6 +201,7 @@ struct WebUIField {
             label = other.label;
             type = other.type;
             value = other.value;
+            values = other.values;
             unit = other.unit;
             readOnly = other.readOnly;
             namePtr = other.namePtr;
@@ -210,7 +212,6 @@ struct WebUIField {
             minValue = other.minValue;
             maxValue = other.maxValue;
             options = other.options;
-            selectedValues = other.selectedValues;
             optionLabels = other.optionLabels;
             endpoint = other.endpoint;
             if (other.config) {
@@ -232,17 +233,29 @@ struct WebUIField {
     const char* getValueCStr() const { return valuePtr ? valuePtr : value.c_str(); }
     const char* getUnitCStr() const { return unitPtr ? unitPtr : unit.c_str(); }
     const char* getEndpointCStr() const { return endpointPtr ? endpointPtr : endpoint.c_str(); }
+    bool isMultiValue() const {
+        return type == WebUIFieldType::Multiselect || type == WebUIFieldType::OrderedList;
+    }
 
     // Fluent interface
     WebUIField& range(float min, float max) { minValue = min; maxValue = max; return *this; }
-    WebUIField& choices(const std::vector<String>& opts) { options = opts; return *this; }
-    WebUIField& values(const std::vector<String>& vals) {
-        selectedValues = vals;
+    WebUIField& choices(const std::vector<String>& opts, bool addVals = false) {
+        options = opts;
+        if (addVals) setValues(opts);
         return *this;
     }
-    WebUIField& addOption(const String& val, const String& lbl) {
+    WebUIField& setValues(const std::vector<String>& vals) {
+        values = vals;
+        return *this;
+    }
+    WebUIField& addOption(const String& val, const String& lbl, bool addVal = false) {
         options.push_back(val);
         optionLabels[val] = lbl;
+        if (addVal) addValue(val);
+        return *this;
+    }
+    WebUIField& addValue(const String& val) {
+        values.push_back(val);
         return *this;
     }
     WebUIField& api(const char* ep) { endpointPtr = ep; endpoint = ""; return *this; }

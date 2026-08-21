@@ -8,7 +8,7 @@ class DomoticsApp {
 
         // Enum mappings from C++ backend
         this.WebUILocation = { Dashboard: 0, ComponentDetail: 1, HeaderStatus: 2, QuickControls: 3, Settings: 4, HeaderInfo: 5 };
-        this.WebUIFieldType = { Text: 0, Number: 1, Float: 2, Boolean: 3, Select: 4, Slider: 5, Color: 6, Button: 7, Display: 8, Chart: 9, Status: 10, Progress: 11, Password: 12, File: 13, Multiselect: 14 };
+        this.WebUIFieldType = { Text: 0, Number: 1, Float: 2, Boolean: 3, Select: 4, Slider: 5, Color: 6, Button: 7, Display: 8, Chart: 9, Status: 10, Progress: 11, Password: 12, File: 13, Multiselect: 14, OrderedList: 15 };
 
         // Chart history storage (contextId_fieldName -> array of values)
         this.chartData = new Map();
@@ -279,6 +279,7 @@ class DomoticsApp {
     renderField(field, contextId) {
         const fieldId = `${contextId}_${field.name}`;
         let fieldHtml = '';
+        let rowClass = '';
         switch (field.type) {
             case this.WebUIFieldType.Boolean:
                 fieldHtml = `
@@ -335,7 +336,12 @@ class DomoticsApp {
                         }).join('');
                         fieldHtml = `<select id="${fieldId}" ${selectAttributes} ${field.readOnly ? 'disabled' : ''}>${optsHtml}</select>`;
                     }
+                    if (multiple) rowClass = 'field-row-multiselect';
                 }
+                break;
+            case this.WebUIFieldType.OrderedList:
+                fieldHtml = `<div id="${fieldId}" class="ordered-list">${this.orderedListItemsHtml(field.value, field.optionLabels)}</div>`;
+                rowClass = 'field-row-ordered-list';
                 break;
             case this.WebUIFieldType.Slider:
                 {
@@ -401,11 +407,8 @@ class DomoticsApp {
                 break;
         }
 
-        const rowClass = field.type === this.WebUIFieldType.Multiselect
-            ? 'field-row field-row-multiselect'
-            : 'field-row';
         return `
-            <div class="${rowClass}">
+            <div class="field-row ${rowClass}">
                 <span class="field-label">${field.label}:</span>
                 ${fieldHtml}
             </div>`;
@@ -435,6 +438,53 @@ class DomoticsApp {
             const select = document.getElementById(fieldId);
             if (select) select.innerHTML = '<option value="">Error loading options</option>';
         }
+    }
+
+    orderedListItemsHtml(items, labels = {}) {
+        if (!Array.isArray(items)) return '';
+        return items.map(item => {
+            const value = String(item == null ? '' : item);
+            const label = String(labels && labels[value] != null ? labels[value] : value);
+            return `<div class="ordered-list-item" draggable="false" data-value="${value}"><span class="drag-handle">&#8942;&#8942;</span><span>${label}</span></div>`;
+        }).join('');
+    }
+
+    renderOrderedListItems(element, items, labels = {}) {
+        if (element) element.innerHTML = this.orderedListItemsHtml(items, labels);
+    }
+
+    getOrderedListValue(element) {
+        if (!element) return [];
+        return Array.from(element.querySelectorAll('.ordered-list-item'))
+            .map(item => item.dataset.value || '');
+    }
+
+    attachOrderedList(card, context, field, element) {
+        let dragged = null;
+        element.addEventListener('dragstart', event => {
+            if (card.dataset.editing !== 'true') {
+                event.preventDefault();
+                return;
+            }
+            dragged = event.target.closest('.ordered-list-item');
+            if (dragged) dragged.classList.add('dragging');
+        });
+        element.addEventListener('dragover', event => {
+            if (!dragged || card.dataset.editing !== 'true') return;
+            event.preventDefault();
+            const target = event.target.closest('.ordered-list-item');
+            if (!target || target === dragged) return;
+            const after = event.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2;
+            element.insertBefore(dragged, after ? target.nextSibling : target);
+        });
+        element.addEventListener('dragend', () => {
+            if (!dragged) return;
+            dragged.classList.remove('dragging');
+            dragged = null;
+            if (card.dataset.editing === 'true') {
+                this.bufferFieldChange(card, field.name, this.getOrderedListValue(element));
+            }
+        });
     }
 
     setupEventListeners() {
@@ -664,7 +714,9 @@ class DomoticsApp {
                         const fieldId = `${contextId}_${fieldName}`;
                         const inputEl = card.querySelector(`#${fieldId}`);
                         if (inputEl) {
-                            if (inputEl.type === 'checkbox') {
+                            if (fieldSchema && fieldSchema.type === this.WebUIFieldType.OrderedList) {
+                                this.renderOrderedListItems(inputEl, value, fieldSchema.optionLabels);
+                            } else if (inputEl.type === 'checkbox') {
                                 const newChecked = (value === 'true' || value === true);
                                 if (inputEl.checked !== newChecked) {
                                     inputEl.checked = newChecked;
@@ -908,6 +960,12 @@ class DomoticsApp {
             if (field.readOnly) return;
 
             const fieldId = `${context.contextId}_${field.name}`;
+
+            if (field.type === this.WebUIFieldType.OrderedList) {
+                const list = card.querySelector(`#${fieldId}`);
+                if (list) this.attachOrderedList(card, context, field, list);
+                return;
+            }
             
             // Special handling for File upload fields
             if (field.type === this.WebUIFieldType.File) {
@@ -1047,9 +1105,11 @@ class DomoticsApp {
             this.editingContexts.add(context.contextId);
             const baseline = {};
             context.fields.forEach(f => {
-                const el = card.querySelector(`#${f.name}`);
+                const el = card.querySelector(`#${context.contextId}_${f.name}`);
                 if (!el) return;
-                baseline[f.name] = (el.type === 'checkbox') ? el.checked : el.value;
+                baseline[f.name] = f.type === this.WebUIFieldType.OrderedList
+                    ? this.getOrderedListValue(el)
+                    : (el.type === 'checkbox') ? el.checked : el.value;
             });
             card.dataset.baseline = JSON.stringify(baseline);
             card.dataset.pending = '{}';
@@ -1106,9 +1166,12 @@ class DomoticsApp {
         const cancelEdit = () => {
             const baseline = card.dataset.baseline ? JSON.parse(card.dataset.baseline) : {};
             Object.entries(baseline).forEach(([name, value]) => {
-                const el = card.querySelector(`#${name}`);
+                const field = context.fields.find(item => item.name === name);
+                const el = card.querySelector(`#${context.contextId}_${name}`);
                 if (!el) return;
-                if (el.type === 'checkbox') {
+                if (field && field.type === this.WebUIFieldType.OrderedList) {
+                    this.renderOrderedListItems(el, value, field.optionLabels);
+                } else if (el.type === 'checkbox') {
                     el.checked = (value === true || value === 'true');
                 } else {
                     el.value = value;
@@ -1146,6 +1209,12 @@ class DomoticsApp {
             } else {
                 el.disabled = true;
             }
+        });
+        card.querySelectorAll('.ordered-list-item').forEach(item => {
+            item.draggable = isEditing;
+        });
+        card.querySelectorAll('.ordered-list').forEach(list => {
+            list.classList.toggle('editing', isEditing);
         });
     }
 

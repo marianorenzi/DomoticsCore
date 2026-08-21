@@ -98,6 +98,7 @@ inline int16_t scanComplete() { return WiFiImpl::scanComplete(); }
 inline void scanDelete() { WiFiImpl::scanDelete(); }
 inline void disconnectAndOff() { WiFiImpl::disconnectAndOff(); }
 inline uint8_t getRawStatus() { return WiFiImpl::getRawStatus(); }
+inline bool setRoutePriority(int priority) { return WiFiImpl::setRoutePriority(priority); }
 
 } // namespace WiFiHAL
 } // namespace HAL

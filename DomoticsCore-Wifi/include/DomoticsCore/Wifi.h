@@ -393,6 +393,10 @@ public:
     }
 
     const char* getProviderId() const override { return "wifi"; }
+
+    bool setRoutePriority(int priority) override {
+        return HAL::WiFiHAL::setRoutePriority(priority);
+    }
     
     String getLocalIP() const override {
         // In STA+AP mode, prioritize station IP for connectivity

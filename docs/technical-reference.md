@@ -346,7 +346,7 @@ Providers contribute to 6 UI locations via `WebUILocation`:
 
 ### UI Field Types
 
-The WebUI uses `WebUIField` and `WebUIContext` fluent builders (not `BaseWebUIComponents`). Available `WebUIFieldType` values: `Text`, `Number`, `Float`, `Boolean`, `Select`, `Slider`, `Color`, `Button`, `Display`, `Chart`, `Status`, `Progress`, `Password`, `File`, `Multiselect`. Multiselect uses the same options as Select and represents selected values as a JSON array. Set initial values with `.values({...})`; action handlers receive the array serialized as JSON in their string `value` parameter.
+The WebUI uses `WebUIField` and `WebUIContext` fluent builders (not `BaseWebUIComponents`). Available `WebUIFieldType` values: `Text`, `Number`, `Float`, `Boolean`, `Select`, `Slider`, `Color`, `Button`, `Display`, `Chart`, `Status`, `Progress`, `Password`, `File`, `Multiselect`, `OrderedList`. Multi-value fields serialize their `values` member as a JSON array; initialize it with `.setValues({...})`, `.choices({...}, true)`, `.addValue(...)`, or the `addVal` argument of `.addOption(...)`. Action handlers receive that array serialized as JSON in their string `value` parameter. `OrderedList` uses `options` and `optionLabels` as schema metadata and presents `values` in drag-and-drop order.
 
 ### Presentation Styles
 

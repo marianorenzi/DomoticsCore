@@ -15,6 +15,7 @@ public:
     virtual String getNetworkType() const = 0;
     virtual String getConnectionStatus() const = 0;
     virtual String getNetworkInfo() const = 0;
+    virtual bool setRoutePriority(int priority) = 0;
     virtual void setConnectionCallback(std::function<void(bool)> callback) { (void)callback; }
     virtual int32_t getSignalStrength() const { return 0; }
     virtual String getMacAddress() const { return ""; }

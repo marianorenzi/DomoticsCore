@@ -85,8 +85,31 @@ inline void scanDelete() { WiFi.scanDelete(); }
 inline void disconnectAndOff() { WiFi.disconnect(true); WiFi.mode(WIFI_OFF); }
 inline uint8_t getRawStatus() { return (uint8_t)WiFi.status(); }
 
-} // namespace WiFiImpl
+inline bool setRoutePriority(int priority) {
+    WiFiHAL::Mode mode = getMode();
+    bool applied = false;
+    bool success = true;
 
+    if (mode == WiFiHAL::Mode::Station ||
+        mode == WiFiHAL::Mode::StationAndAP) {
+        applied = true;
+        success =
+            WiFi.STA.setRoutePrio(priority) == ESP_OK &&
+            success;
+    }
+
+    if (mode == WiFiHAL::Mode::AccessPoint ||
+        mode == WiFiHAL::Mode::StationAndAP) {
+        applied = true;
+        success =
+            WiFi.AP.setRoutePrio(priority) == ESP_OK &&
+            success;
+    }
+
+    return applied && success;
+}
+
+} // namespace WiFiImpl
 } // namespace HAL
 } // namespace DomoticsCore
 

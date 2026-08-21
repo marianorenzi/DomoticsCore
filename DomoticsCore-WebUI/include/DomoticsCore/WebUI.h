@@ -838,9 +838,9 @@ private:
             fieldObj["name"] = field.getNameCStr();
             fieldObj["label"] = field.getLabelCStr();
             fieldObj["type"] = (int)field.type;
-            if (field.type == WebUIFieldType::Multiselect) {
+            if (field.isMultiValue()) {
                 JsonArray values = fieldObj["value"].to<JsonArray>();
-                for (const String& value : field.selectedValues) values.add(value);
+                for (const String& value : field.values) values.add(value);
             } else {
                 fieldObj["value"] = field.getValueCStr();
             }
